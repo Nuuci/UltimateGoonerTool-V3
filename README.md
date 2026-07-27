@@ -2,9 +2,9 @@
 
 Portable PowerShell media launcher for Windows.
 
-Features:
-- Grid of 200+ adult video sites
-- Download support using gallery-dl (saves to your chosen folder)
+**Features:**
+- Large grid of adult video sites
+- Download support (yt-dlp main + gallery-dl fallback)
 - Intensity slider
 - Timers and random prompts
 - Multi-site search and performer search
@@ -14,19 +14,38 @@ Features:
 
 ---
 
-## How to Download
+## Recommended Way to Get the Tool
 
-**Option 1 – Single file (recommended)**
-1. Go to the repository page
+If downloading the file keeps failing or the script opens and closes immediately, use this method:
+
+1. Open the `.ps1` file on GitHub
+2. Click the **Raw** button
+3. Select all the code (`Ctrl + A`) and copy it (`Ctrl + C`)
+4. Open **Notepad**
+5. Paste the code (`Ctrl + V`)
+6. Click **File → Save As**
+7. Set these options:
+   - **File name:** `UltimateGoonerTool_V3.ps1`
+   - **Save as type:** All Files (*.*)
+   - **Encoding:** UTF-8
+8. Save it to your Desktop
+
+Then right-click the file → **Run with PowerShell**
+
+---
+
+## Alternative Download Methods
+
+**Option A – Direct file**
+1. Go to the repository
 2. Click the `.ps1` file
-3. Click the **Raw** button
+3. Click **Raw**
 4. Right-click the page → **Save as...**
-5. Save it to your Desktop or Downloads folder
 
-**Option 2 – Full repository**
+**Option B – ZIP**
 1. Click the green **Code** button
-2. Select **Download ZIP**
-3. Extract the ZIP file
+2. Click **Download ZIP**
+3. Extract the file
 
 ---
 
@@ -35,14 +54,12 @@ Features:
 - Right-click the `.ps1` file
 - Select **Run with PowerShell**
 
-Alternatively, open PowerShell and run:
+Or open PowerShell and run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File "C:\Path\To\UltimateGoonerTool_V3.ps1"
 
 First Launch
-The first time you run the tool it will ask for permission to run scripts.
-Click Continue and select your preferred download folder when prompted.
-After that the tool will open normally.
-
-If you run into any issues, feel free to message me.
+The first time you run it, Windows may ask for permission to run scripts.
+Click Continue. After that the tool should open normally.
+If you have any problems, message me.
