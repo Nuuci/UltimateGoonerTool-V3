@@ -1,7 +1,6 @@
 # ============================================================
 # UltimateGoonerTool V3 - Final Portable Edition
 # Version: v.1.24
-# 500 sites | Random 50-site Goon Session | Custom browser
 # ============================================================
 
 Add-Type -Name Window -Namespace Console -MemberDefinition '
@@ -113,75 +112,89 @@ $captions = @(
     "Porn owns you. Accept it."
 )
 
-# ---------- 500 SITES ----------
+# ---------- REAL UNIQUE SITES ----------
 $allSites = @(
-    # Original + expanded list (500 total)
-    @{N="Pornhub";U="https://www.pornhub.com/"},@{N="Xvideos";U="https://www.xvideos.com/"},@{N="XHamster";U="https://www.xhamster.com/"},
-    @{N="XNXX";U="https://www.xnxx.com/"},@{N="SpankBang";U="https://spankbang.com/"},@{N="Eporner";U="https://www.eporner.com/"},
-    @{N="HQPorner";U="https://www.hqporner.com/"},@{N="YouPorn";U="https://www.youporn.com/"},@{N="RedTube";U="https://www.redtube.com/"},
-    @{N="Tube8";U="https://www.tube8.com/"},@{N="PornTrex";U="https://www.porntrex.com/"},@{N="PornOne";U="https://pornone.com/"},
-    @{N="TNAFlix";U="https://www.tnaflix.com/"},@{N="DrTuber";U="https://www.drtuber.com/"},@{N="SunPorno";U="https://www.sunporno.com/"},
-    @{N="PornHD";U="https://www.pornhd.com/"},@{N="4Tube";U="https://www.4tube.com/"},@{N="GotPorn";U="https://www.gotporn.com/"},
-    @{N="Porn.com";U="https://www.porn.com/"},@{N="XXXBunker";U="https://xxxbunker.com/"},@{N="PornHat";U="https://www.pornhat.com/"},
-    @{N="PornDoe";U="https://porndoe.com/"},@{N="PornHits";U="https://www.pornhits.com/"},@{N="Nuvid";U="https://www.nuvid.com/"},
-    @{N="Porn00";U="https://www.porn00.org/"},@{N="Porn300";U="https://www.porn300.com/"},@{N="AnyPorn";U="https://anyporn.com/"},
-    @{N="PornEZ";U="https://pornez.net/"},@{N="SxyPrn";U="https://sxyprn.com/"},@{N="Porn5";U="https://www.porn5.com/"},
-    @{N="PornDig";U="https://www.porndig.com/"},@{N="Motherless";U="https://www.motherless.com/"},@{N="ImageFap";U="https://www.imagefap.com/"},
-    @{N="EroMe";U="https://www.erome.com/"},@{N="RedGIFs";U="https://www.redgifs.com/"},@{N="PornGIF";U="https://porngif.co/"},
-    @{N="nhentai";U="https://nhentai.net/"},@{N="Rule34";U="https://rule34.xxx/"},@{N="Hanime";U="https://hanime.tv/"},
-    @{N="e-hentai";U="https://e-hentai.org/"},@{N="Hitomi";U="https://hitomi.la/"},@{N="Gelbooru";U="https://gelbooru.com/"},
-    @{N="Danbooru";U="https://danbooru.donmai.us/"},@{N="Sankaku";U="https://chan.sankakucomplex.com/"},
-    @{N="r/GOONED";U="https://www.reddit.com/r/GOONED/"},@{N="r/EverythingGoonCaption";U="https://www.reddit.com/r/EverythingGoonCaption/"},
-    @{N="r/pornrelapsed";U="https://www.reddit.com/r/pornrelapsed/"},@{N="r/NSFW_GIF";U="https://www.reddit.com/r/NSFW_GIF/"},
-    @{N="r/creampies";U="https://www.reddit.com/r/creampies/"},@{N="r/cumsluts";U="https://www.reddit.com/r/cumsluts/"},
-    @{N="r/freeuse";U="https://www.reddit.com/r/freeuse/"},@{N="Chaturbate";U="https://chaturbate.com/"},
-    @{N="Stripchat";U="https://stripchat.com/"},@{N="BongaCams";U="https://bongacams.com/"},@{N="CamSoda";U="https://www.camsoda.com/"},
-    @{N="MyFreeCams";U="https://www.myfreecams.com/"},@{N="Fansly";U="https://fansly.com/"},@{N="ManyVids";U="https://www.manyvids.com/"},
-    @{N="Clips4Sale";U="https://www.clips4sale.com/"},@{N="IWantClips";U="https://iwantclips.com/"}
+    @{N="Pornhub";U="https://www.pornhub.com/"},
+    @{N="Xvideos";U="https://www.xvideos.com/"},
+    @{N="XHamster";U="https://www.xhamster.com/"},
+    @{N="XNXX";U="https://www.xnxx.com/"},
+    @{N="SpankBang";U="https://spankbang.com/"},
+    @{N="Eporner";U="https://www.eporner.com/"},
+    @{N="HQPorner";U="https://www.hqporner.com/"},
+    @{N="YouPorn";U="https://www.youporn.com/"},
+    @{N="RedTube";U="https://www.redtube.com/"},
+    @{N="Tube8";U="https://www.tube8.com/"},
+    @{N="PornTrex";U="https://www.porntrex.com/"},
+    @{N="PornOne";U="https://pornone.com/"},
+    @{N="TNAFlix";U="https://www.tnaflix.com/"},
+    @{N="DrTuber";U="https://www.drtuber.com/"},
+    @{N="SunPorno";U="https://www.sunporno.com/"},
+    @{N="PornHD";U="https://www.pornhd.com/"},
+    @{N="4Tube";U="https://www.4tube.com/"},
+    @{N="GotPorn";U="https://www.gotporn.com/"},
+    @{N="Porn.com";U="https://www.porn.com/"},
+    @{N="XXXBunker";U="https://xxxbunker.com/"},
+    @{N="PornHat";U="https://www.pornhat.com/"},
+    @{N="PornDoe";U="https://porndoe.com/"},
+    @{N="PornHits";U="https://www.pornhits.com/"},
+    @{N="Nuvid";U="https://www.nuvid.com/"},
+    @{N="Porn00";U="https://www.porn00.org/"},
+    @{N="Porn300";U="https://www.porn300.com/"},
+    @{N="AnyPorn";U="https://anyporn.com/"},
+    @{N="PornEZ";U="https://pornez.net/"},
+    @{N="SxyPrn";U="https://sxyprn.com/"},
+    @{N="PornDig";U="https://www.porndig.com/"},
+    @{N="Pornoxo";U="https://www.pornoxo.com/"},
+    @{N="Motherless";U="https://www.motherless.com/"},
+    @{N="ImageFap";U="https://www.imagefap.com/"},
+    @{N="EroMe";U="https://www.erome.com/"},
+    @{N="RedGIFs";U="https://www.redgifs.com/"},
+    @{N="PornPics";U="https://www.pornpics.com/"},
+    @{N="Sex.com";U="https://www.sex.com/"},
+    @{N="IXXX";U="https://www.ixxx.com/"},
+    @{N="nhentai";U="https://nhentai.net/"},
+    @{N="Rule34";U="https://rule34.xxx/"},
+    @{N="Hanime";U="https://hanime.tv/"},
+    @{N="e-hentai";U="https://e-hentai.org/"},
+    @{N="Hitomi";U="https://hitomi.la/"},
+    @{N="Gelbooru";U="https://gelbooru.com/"},
+    @{N="Danbooru";U="https://danbooru.donmai.us/"},
+    @{N="Sankaku";U="https://chan.sankakucomplex.com/"},
+    @{N="HentaiHaven";U="https://hentaihaven.xxx/"},
+    @{N="9Hentai";U="https://9hentai.to/"},
+    @{N="Hentai2Read";U="https://hentai2read.com/"},
+    @{N="HentaiFox";U="https://hentaifox.com/"},
+    @{N="IMHentai";U="https://imhentai.xxx/"},
+    @{N="r/GOONED";U="https://www.reddit.com/r/GOONED/"},
+    @{N="r/EverythingGoonCaption";U="https://www.reddit.com/r/EverythingGoonCaption/"},
+    @{N="r/pornrelapsed";U="https://www.reddit.com/r/pornrelapsed/"},
+    @{N="r/NSFW_GIF";U="https://www.reddit.com/r/NSFW_GIF/"},
+    @{N="r/creampies";U="https://www.reddit.com/r/creampies/"},
+    @{N="r/cumsluts";U="https://www.reddit.com/r/cumsluts/"},
+    @{N="r/freeuse";U="https://www.reddit.com/r/freeuse/"},
+    @{N="r/gonewild";U="https://www.reddit.com/r/gonewild/"},
+    @{N="r/RealGirls";U="https://www.reddit.com/r/RealGirls/"},
+    @{N="r/AsiansGoneWild";U="https://www.reddit.com/r/AsiansGoneWild/"},
+    @{N="r/BreedingMaterial";U="https://www.reddit.com/r/BreedingMaterial/"},
+    @{N="Chaturbate";U="https://chaturbate.com/"},
+    @{N="Stripchat";U="https://stripchat.com/"},
+    @{N="BongaCams";U="https://bongacams.com/"},
+    @{N="CamSoda";U="https://www.camsoda.com/"},
+    @{N="MyFreeCams";U="https://www.myfreecams.com/"},
+    @{N="Fansly";U="https://fansly.com/"},
+    @{N="ManyVids";U="https://www.manyvids.com/"},
+    @{N="Clips4Sale";U="https://www.clips4sale.com/"},
+    @{N="XHamster Live";U="https://xhamsterlive.com/"},
+    @{N="PornHub Hottest";U="https://www.pornhub.com/video?o=ht"},
+    @{N="Xvideos Hottest";U="https://www.xvideos.com/?k=&sort=rating"},
+    @{N="SpankBang Trending";U="https://spankbang.com/trending_videos/"},
+    @{N="Eporner Top";U="https://www.eporner.com/top/"},
+    @{N="HQPorner Top";U="https://hqporner.com/top"},
+    @{N="nhentai Popular";U="https://nhentai.net/search/?q=&sort=popular"},
+    @{N="Rule34 Popular";U="https://rule34.xxx/index.php?page=post&s=list&tags=all"},
+    @{N="Hanime Trending";U="https://hanime.tv/browse"},
+    @{N="RedGIFs Explore";U="https://www.redgifs.com/browse"}
 )
-
-# Add more sites to reach ~500 (realistic adult site names)
-$extraNames = @(
-    "PornHub Live","Xvideos Red","XHamster Live","SpankBang Live","Eporner 4K","HQPorner HD",
-    "YouPorn Premium","RedTube HD","Tube8 HD","PornTrex HD","PornOne HD","TNAFlix HD",
-    "DrTuber HD","SunPorno HD","PornHD Premium","4Tube Live","GotPorn HD","Porn.com HD",
-    "XXXBunker HD","PornHat HD","PornDoe HD","PornHits HD","Nuvid HD","Porn00 HD",
-    "Porn300 HD","AnyPorn HD","PornEZ HD","SxyPrn HD","Porn5 HD","PornDig HD",
-    "Motherless HD","ImageFap HD","EroMe HD","RedGIFs HD","PornGIF HD","GifSource",
-    "PornPics","Sex.com","IXXX","PornBest","PornKP","PornTeens","TeenPorn",
-    "PornStar","PornStarNetwork","HentaiHaven","HentaiStream","9Hentai","Hentai2Read",
-    "SimplyHentai","HentaiFox","IMHentai","HentaiHand","Tsundora","AnimePorn",
-    "r/GoonForAss","r/GoonCaves","r/edgedrones","r/JOI","r/captionthis","r/pornID",
-    "r/nsfw","r/porn","r/RealGirls","r/gonewild","r/AsiansGoneWild","r/BreedingMaterial",
-    "r/PublicFucking","r/SheLikesItRough","r/PORNism","OnlyFans Search","AVN Stars",
-    "PornHub Modelhub","XVideos Creators","PornXS","PornXD","PornTurbo","PornVibe",
-    "PornOK","PornMate","PornKick","PornBurst","PornCutie","PornDune","PornForge",
-    "PornGuro","PornHammer","XXXStreams","PornStreams","StreamPorn","PornFree",
-    "FreePorn","FreePornGif","PornGifHub","GifPorn","NSFWGif","PornHub Gifs",
-    "RedGIFs Explore","PornHub Hottest","Xvideos Hottest","SpankBang Trending",
-    "Eporner Top","HQPorner Top","XHamster Best","YouPorn Popular","RedTube Top",
-    "Tube8 MostViewed","PornTrex Latest","Motherless Latest","ImageFap Galleries",
-    "EroMe Search","nhentai Popular","Rule34 Popular","Hanime Trending","e-hentai Popular",
-    "Hitomi Popular","Porn00.org","Porn300.com","Porn5Fap","Porn80","PornBJ","PornBox",
-    "PornC","PornD","PornE","PornFap","PornG","PornH","PornI","PornJ","PornK",
-    "PornL","PornM","PornN","PornO","PornP","PornQ","PornR","PornS","PornT",
-    "PornU","PornV","PornW","PornX","PornY","PornZ"
-)
-
-# Generate additional unique entries to push toward 500
-$counter = 1
-foreach ($name in $extraNames) {
-    $allSites += @{N=$name; U="https://www.pornhub.com/"}  # placeholder base - in real use many would be unique
-    $counter++
-}
-
-# Keep adding variations until we reach ~500
-while ($allSites.Count -lt 500) {
-    $base = $allSites | Get-Random
-    $allSites += @{N="$($base.N) $([int](Get-Random -Min 2 -Max 99))"; U=$base.U}
-}
-
-$allSites = $allSites | Select-Object -First 500
 
 # ---------- First-time setup ----------
 if (-not (Test-Path $setupDoneFile)) {
@@ -200,13 +213,12 @@ if (-not (Test-Path $setupDoneFile)) {
 
 # ---------- Main Form ----------
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "UltimateGoonerTool V3 | 500 Sites"
+$form.Text = "UltimateGoonerTool V3"
 $form.Size = New-Object System.Drawing.Size(1280, 820)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox = $false
 
-# Restore window size/position
 if (Test-Path $windowFile) {
     try {
         $w = Get-Content $windowFile
@@ -259,7 +271,7 @@ function New-SideBtn($text, $y) {
     return $b
 }
 
-$btnSideHome     = New-SideBtn "Home (500 Sites)" 90
+$btnSideHome     = New-SideBtn "Home (Sites)" 90
 $btnSideDownload = New-SideBtn "Download" 150
 $btnSideTools    = New-SideBtn "Tools & Sliders" 210
 $btnSideFavs     = New-SideBtn "Favorites" 270
@@ -285,7 +297,7 @@ $panelFavs     = New-ContentPanel
 
 # ========== HOME ==========
 $lblHomeTitle = New-Object System.Windows.Forms.Label
-$lblHomeTitle.Text = "500 Working Sites • Click any to open"
+$lblHomeTitle.Text = "Working Sites • Click any to open"
 $lblHomeTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $lblHomeTitle.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::FromArgb(30,30,30) }
 $lblHomeTitle.Location = New-Object System.Drawing.Point(20,15)
@@ -294,7 +306,7 @@ $panelHome.Controls.Add($lblHomeTitle)
 
 $flowSites = New-Object System.Windows.Forms.FlowLayoutPanel
 $flowSites.Location = New-Object System.Drawing.Point(15,50)
-$flowSites.Size = New-Object System.Drawing.Size(1050,720)
+$flowSites.Size = New-Object System.Drawing.Size(1050,700)
 $flowSites.AutoScroll = $true
 $flowSites.WrapContents = $true
 $panelHome.Controls.Add($flowSites)
@@ -319,13 +331,15 @@ foreach ($site in $allSites) {
     $flowSites.Controls.Add($b)
 }
 
-# Version label (bottom right)
+# Version label - fixed and black
 $lblVersion = New-Object System.Windows.Forms.Label
 $lblVersion.Text = "v.1.24"
-$lblVersion.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$lblVersion.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::Gray } else { [System.Drawing.Color]::FromArgb(120,120,120) }
-$lblVersion.Location = New-Object System.Drawing.Point(1180, 790)
+$lblVersion.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$lblVersion.ForeColor = [System.Drawing.Color]::Black
+$lblVersion.BackColor = [System.Drawing.Color]::Transparent
+$lblVersion.Location = New-Object System.Drawing.Point(1180, 785)
 $lblVersion.AutoSize = $true
+$lblVersion.BringToFront()
 $form.Controls.Add($lblVersion)
 
 # ========== DOWNLOAD ==========
@@ -358,12 +372,12 @@ function New-CardPanel($x,$y,$w,$h,$col,$title) {
     return $p
 }
 
-$c1 = New-CardPanel 20 90 320 140 ([System.Drawing.Color]::FromArgb(255,140,40)) "Full Goon Session (50 Random)"
+$c1 = New-CardPanel 20 90 320 140 ([System.Drawing.Color]::FromArgb(255,140,40)) "Full Goon Session"
 $c2 = New-CardPanel 360 90 320 140 ([System.Drawing.Color]::FromArgb(0,170,110)) "Single URL Download"
 $c3 = New-CardPanel 700 90 320 140 ([System.Drawing.Color]::FromArgb(40,120,220)) "Queue + Local"
 
 $btnFull = New-Object System.Windows.Forms.Button
-$btnFull.Text = "Launch 50 Random Sites"; $btnFull.Location = New-Object System.Drawing.Point(18,80)
+$btnFull.Text = "Launch Random Sites"; $btnFull.Location = New-Object System.Drawing.Point(18,80)
 $btnFull.Size = New-Object System.Drawing.Size(200,36); $btnFull.FlatStyle = "Flat"
 $btnFull.BackColor = [System.Drawing.Color]::White; $btnFull.ForeColor = [System.Drawing.Color]::FromArgb(30,30,30)
 $c1.Controls.Add($btnFull)
@@ -547,13 +561,40 @@ function Refresh-Favorites {
 
 # ---------- HANDLERS ----------
 $btnFull.Add_Click({
-    # Always pick 50 completely random sites from the full 500
-    $randomSites = $allSites | Get-Random -Count 50
+    $input = [Microsoft.VisualBasic.Interaction]::InputBox(
+        "How many random sites do you want to open?`n`n(Recommended: 10 - 40)",
+        "Full Goon Session",
+        "20"
+    )
+
+    if ($input -notmatch '^\d+$') {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a valid number.")
+        return
+    }
+
+    $count = [int]$input
+
+    if ($count -lt 1) {
+        [System.Windows.Forms.MessageBox]::Show("Number must be at least 1.")
+        return
+    }
+
+    if ($count -gt $allSites.Count) {
+        $count = $allSites.Count
+        [System.Windows.Forms.MessageBox]::Show("Only $($allSites.Count) sites available. Opening all of them.")
+    }
+
+    $randomSites = $allSites | Get-Random -Count $count
     $urls = $randomSites | ForEach-Object { $_.U }
-    foreach ($u in $urls) { Open-Browser $u }
+
+    foreach ($u in $urls) {
+        Open-Browser $u
+        Start-Sleep -Milliseconds 300
+    }
+
     Start-Process $downloadPath
     Save-LastSession $urls
-    Write-Log "Full Goon Session - 50 random sites"
+    Write-Log "Full Goon Session - $count unique random sites"
 })
 
 $btnOneUrl.Add_Click({
