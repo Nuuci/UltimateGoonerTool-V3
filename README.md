@@ -1,16 +1,22 @@
-# UltimateGoonerTool V3
+UltimateGoonerTool v.1.24
+What’s new in this version:
 
-Portable PowerShell media launcher for Windows.
+500 sites on the Home screen (up from ~200)
+Full Goon Session now opens 50 random sites every time (no longer the same sites in order)
+Custom browser support – You can now choose which browser everything opens in (Chrome, Firefox, Edge, Brave, or any custom path)
+Version number v.1.24 displayed in the bottom right of the app
 
-**Features:**
-- Large grid of adult video sites
-- Download support (yt-dlp main + gallery-dl fallback)
-- Intensity slider
-- Timers and random prompts
-- Multi-site search and performer search
-- Session logging and privacy tools
-- Opens all links in your default browser
-- Fully portable (no installation required)
+Previous features still included:
+
+yt-dlp as main downloader + gallery-dl as fallback
+Favorites system
+Dark / Light theme toggle
+Intensity presets (Light / Normal / Heavy)
+Minimize to system tray
+Start with Windows option
+Window size & position memory
+Update checker
+All original tools (Force Goon To, Daily Challenge, Edge Timer, Spin the Wheel, Multi-Site Search, etc.)
 
 ---
 
