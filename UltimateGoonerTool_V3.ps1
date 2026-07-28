@@ -218,13 +218,18 @@ $form.Size = New-Object System.Drawing.Size(1280, 820)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox = $false
+$form.MinimizeBox = $true
 
+# Restore previous size/position only if valid
 if (Test-Path $windowFile) {
     try {
         $w = Get-Content $windowFile
         if ($w.Count -ge 4) {
-            $form.Location = New-Object System.Drawing.Point([int]$w[0], [int]$w[1])
-            $form.Size = New-Object System.Drawing.Size([int]$w[2], [int]$w[3])
+            $x = [int]$w[0]; $y = [int]$w[1]; $width = [int]$w[2]; $height = [int]$w[3]
+            if ($width -gt 400 -and $height -gt 300) {
+                $form.Location = New-Object System.Drawing.Point($x, $y)
+                $form.Size = New-Object System.Drawing.Size($width, $height)
+            }
         }
     } catch {}
 }
@@ -331,7 +336,7 @@ foreach ($site in $allSites) {
     $flowSites.Controls.Add($b)
 }
 
-# Version label - fixed and black
+# Version label
 $lblVersion = New-Object System.Windows.Forms.Label
 $lblVersion.Text = "v.1.24"
 $lblVersion.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -339,7 +344,6 @@ $lblVersion.ForeColor = [System.Drawing.Color]::Black
 $lblVersion.BackColor = [System.Drawing.Color]::Transparent
 $lblVersion.Location = New-Object System.Drawing.Point(1180, 785)
 $lblVersion.AutoSize = $true
-$lblVersion.BringToFront()
 $form.Controls.Add($lblVersion)
 
 # ========== DOWNLOAD ==========
@@ -815,34 +819,18 @@ $btnBg.Add_Click({
     }
 })
 
-# Tray
-$tray = New-Object System.Windows.Forms.NotifyIcon
-$tray.Icon = [System.Drawing.SystemIcons]::Application
-$tray.Text = "UltimateGoonerTool v.1.24"
-$tray.Visible = $false
-$tray.Add_DoubleClick({
-    $form.Show()
-    $form.WindowState = "Normal"
-    $tray.Visible = $false
-})
-
-$form.Add_Resize({
-    if ($form.WindowState -eq "Minimized") {
-        $form.Hide()
-        $tray.Visible = $true
-    }
-})
-
+# ---------- Form Closing (no tray) ----------
 $form.Add_FormClosing({
-    try {
-        "$($form.Location.X)`n$($form.Location.Y)`n$($form.Size.Width)`n$($form.Size.Height)" | Set-Content $windowFile
-    } catch {}
+    if ($form.WindowState -ne "Minimized") {
+        try {
+            "$($form.Location.X)`n$($form.Location.Y)`n$($form.Size.Width)`n$($form.Size.Height)" | Set-Content $windowFile
+        } catch {}
+    }
+
     if ($autoClearOnExit) {
         "chrome","msedge","firefox","brave" | % { taskkill /F /IM "$_.exe" /T 2>$null | Out-Null }
         try { Set-Clipboard $null } catch {}
     }
-    $tray.Visible = $false
-    $tray.Dispose()
 })
 
 # Navigation
