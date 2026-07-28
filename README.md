@@ -1,10 +1,10 @@
 UltimateGoonerTool v.1.24
 What’s new in this version:
 
-Cleaned site list with only real unique working sites (no more duplicate Pornhub links)
-Full Goon Session now lets you choose how many random sites to open
+Cleaned the site list — only real unique working sites remain (no more fake/duplicate Pornhub links)
+Full Goon Session now lets you choose exactly how many random sites to open
 Sites are always unique (never opens the same site twice in one session)
-Custom browser support – Choose Chrome, Firefox, Edge, Brave, or any custom path
+Custom browser support — Choose Chrome, Firefox, Edge, Brave, or any custom path
 Version number v.1.24 displayed in the bottom right
 
 Features included:
