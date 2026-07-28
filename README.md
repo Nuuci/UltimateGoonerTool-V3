@@ -1,18 +1,18 @@
 UltimateGoonerTool v.1.24
 What’s new in this version:
 
-500 sites on the Home screen (up from ~200)
-Full Goon Session now opens 50 random sites every time (no longer the same sites in order)
-Custom browser support – You can now choose which browser everything opens in (Chrome, Firefox, Edge, Brave, or any custom path)
-Version number v.1.24 displayed in the bottom right of the app
+Cleaned site list with only real unique working sites (no more duplicate Pornhub links)
+Full Goon Session now lets you choose how many random sites to open
+Sites are always unique (never opens the same site twice in one session)
+Custom browser support – Choose Chrome, Firefox, Edge, Brave, or any custom path
+Version number v.1.24 displayed in the bottom right
 
-Previous features still included:
+Features included:
 
 yt-dlp as main downloader + gallery-dl as fallback
 Favorites system
 Dark / Light theme toggle
 Intensity presets (Light / Normal / Heavy)
-Minimize to system tray
 Start with Windows option
 Window size & position memory
 Update checker
