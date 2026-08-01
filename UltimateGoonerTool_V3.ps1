@@ -249,6 +249,18 @@ function Show-FfmpegWarning {
     return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
 }
 
+function Force-Delete($path) {
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    try { [System.IO.File]::SetAttributes($path, 'Normal') } catch {}
+    try { [System.IO.File]::Delete($path) } catch {}
+    if (Test-Path -LiteralPath $path) {
+        try { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    if (Test-Path -LiteralPath $path) {
+        try { cmd /c "del /f /q `"$path`"" 2>$null | Out-Null } catch {}
+    }
+}
+
 function Show-ConvertDialog {
     if (-not (Test-FFmpeg)) {
         if (-not (Show-FfmpegWarning)) { return }
@@ -355,7 +367,8 @@ function Show-ConvertDialog {
 
         $files = @()
         if ($script:isFolder) {
-            $files = Get-ChildItem $script:selectedPath -File -Include *.m4v,*.mkv,*.webm,*.avi,*.mov,*.wmv,*.flv -ErrorAction SilentlyContinue
+            # Same extension set as single-file OpenFileDialog filter
+            $files = @(Get-ChildItem -Path (Join-Path $script:selectedPath '*') -File -Include *.m4v,*.mkv,*.webm,*.avi,*.mov,*.wmv,*.flv -ErrorAction SilentlyContinue)
         } else {
             if (Test-Path $script:selectedPath) {
                 $files = @(Get-Item $script:selectedPath)
@@ -380,18 +393,22 @@ function Show-ConvertDialog {
             $progress.Value = $i
             [System.Windows.Forms.Application]::DoEvents()
 
-            $out = [System.IO.Path]::ChangeExtension($f.FullName, ".mp4")
+            $sourcePath = $f.FullName
+            $out = [System.IO.Path]::ChangeExtension($sourcePath, ".mp4")
+
             if (Test-Path $out) {
                 $converted++
+                Force-Delete $sourcePath
                 continue
             }
 
             try {
                 $ff = if ($script:ffmpegPath) { $script:ffmpegPath } else { "ffmpeg" }
-                $args = "-y -i `"$($f.FullName)`" -c copy `"$out`""
+                $args = "-y -i `"$sourcePath`" -c copy `"$out`""
                 $p = Start-Process $ff -ArgumentList $args -Wait -NoNewWindow -PassThru
-                if (Test-Path $out) {
+                if ((Test-Path $out) -and ((Get-Item $out).Length -gt 0)) {
                     $converted++
+                    Force-Delete $sourcePath
                 } else {
                     $failed++
                 }
@@ -405,7 +422,7 @@ function Show-ConvertDialog {
         $btnStart.Enabled = $true
         $btnBrowse.Enabled = $true
 
-        [System.Windows.Forms.MessageBox]::Show("Conversion finished.`n`nConverted: $converted`nFailed: $failed")
+        [System.Windows.Forms.MessageBox]::Show("Conversion finished.`n`nConverted: $converted`nFailed: $failed`nOriginals force-deleted.")
     })
 
     $btnClose.Add_Click({ $dlg.Close() })
@@ -856,6 +873,7 @@ $btnLast      = New-Tool "Open Last Session" 860 370
 $btnCloseAll  = New-Tool "Close All Browsers" 20 430 220
 $btnBg        = New-Tool "Change Background" 260 430 200
 $btnUpdate    = New-Tool "Check for Updates" 480 430 200
+$btnDebugger  = New-Tool "Debugger" 700 430 160
 
 $lblFav = New-Object System.Windows.Forms.Label
 $lblFav.Text = "Your Favorites"
@@ -1055,6 +1073,94 @@ $btnUpdate.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("Opened GitHub page.")
 })
 
+$btnDebugger.Add_Click({
+    $debugFile = Join-Path $configDir "debug_log.txt"
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("========== DEBUG DUMP $ts ==========")
+    $lines.Add("")
+    $lines.Add("--- Environment ---")
+    $lines.Add("PSVersion: $($PSVersionTable.PSVersion)")
+    $lines.Add("OS: $([Environment]::OSVersion.VersionString)")
+    $lines.Add("User: $env:USERNAME")
+    $lines.Add("Machine: $env:COMPUTERNAME")
+    $lines.Add("Script: $PSCommandPath")
+    $lines.Add("WorkingDir: $(Get-Location)")
+    $lines.Add("")
+    $lines.Add("--- Paths ---")
+    $lines.Add("configDir: $configDir (exists=$(Test-Path $configDir))")
+    $lines.Add("downloadPath: $downloadPath (exists=$(Test-Path $downloadPath))")
+    $lines.Add("configFile: $configFile (exists=$(Test-Path $configFile))")
+    $lines.Add("settingsFile: $settingsFile (exists=$(Test-Path $settingsFile))")
+    $lines.Add("logFile: $logFile (exists=$(Test-Path $logFile))")
+    $lines.Add("bgImage: $bgImage (exists=$(Test-Path $bgImage))")
+    $lines.Add("")
+    $lines.Add("--- Settings ---")
+    $lines.Add("autoClearOnExit=$autoClearOnExit")
+    $lines.Add("hornyLevel=$hornyLevel")
+    $lines.Add("isDarkTheme=$isDarkTheme")
+    $lines.Add("startWithWindows=$startWithWindows")
+    $lines.Add("suppressGalleryWarning=$suppressGalleryWarning")
+    $lines.Add("suppressFfmpegWarning=$suppressFfmpegWarning")
+    $lines.Add("preferredBrowser=$preferredBrowser")
+    $lines.Add("")
+    $lines.Add("--- Tool Detection ---")
+    $hasY = Test-Ytdlp
+    $hasG = Test-GalleryDL
+    $hasF = Test-FFmpeg
+    $lines.Add("yt-dlp found: $hasY")
+    $lines.Add("gallery-dl found: $hasG")
+    $lines.Add("ffmpeg found: $hasF")
+    $lines.Add("ffmpegPath: $script:ffmpegPath")
+    try {
+        $whereFf = & where.exe ffmpeg 2>$null
+        $lines.Add("where.exe ffmpeg: $($whereFf -join ' | ')")
+    } catch { $lines.Add("where.exe ffmpeg: failed") }
+    try {
+        $whereY = & where.exe yt-dlp 2>$null
+        $lines.Add("where.exe yt-dlp: $($whereY -join ' | ')")
+    } catch { $lines.Add("where.exe yt-dlp: failed") }
+    $lines.Add("")
+    $lines.Add("--- Download Folder Contents (top 50) ---")
+    if (Test-Path $downloadPath) {
+        try {
+            $dlFiles = Get-ChildItem $downloadPath -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 50
+            $lines.Add("Total files listed: $($dlFiles.Count)")
+            foreach ($df in $dlFiles) {
+                $lines.Add("  $($df.Name) | $($df.Length) bytes | $($df.LastWriteTime)")
+            }
+        } catch { $lines.Add("Error listing download folder: $_") }
+    } else {
+        $lines.Add("Download folder missing.")
+    }
+    $lines.Add("")
+    $lines.Add("--- Favorites count ---")
+    $lines.Add("favorites: $($favorites.Count)")
+    $lines.Add("")
+    $lines.Add("--- PATH (truncated) ---")
+    $lines.Add(($env:PATH -split ';' | Select-Object -First 30) -join "`n")
+    $lines.Add("")
+    $lines.Add("--- Last session log tail ---")
+    if (Test-Path $logFile) {
+        try {
+            $tail = Get-Content $logFile -Tail 20 -ErrorAction SilentlyContinue
+            $lines.Add(($tail -join "`n"))
+        } catch { $lines.Add("Could not read log: $_") }
+    } else {
+        $lines.Add("(no session log)")
+    }
+    $lines.Add("")
+    $lines.Add("========== END DUMP ==========")
+    $lines.Add("")
+
+    try {
+        Add-Content -Path $debugFile -Value ($lines -join "`r`n") -Encoding UTF8
+        [System.Windows.Forms.MessageBox]::Show("Debug log written to:`n$debugFile","Debugger")
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to write debug log:`n$_","Debugger Error")
+    }
+})
+
 $btnGoonTo.Add_Click({
     $files = Get-ChildItem "$downloadPath\*.*" -Include *.mp4,*.m4v,*.mkv -ErrorAction SilentlyContinue
     if ($files -and (Get-Random -Max 2) -eq 0) {
@@ -1205,6 +1311,24 @@ $btnSideDownload.Add_Click({ Show-Panel $panelDownload })
 $btnSideTools.Add_Click({ Show-Panel $panelTools })
 $btnSideFavs.Add_Click({ Refresh-Favorites; Show-Panel $panelFavs })
 $btnSidePrivacy.Add_Click({
+    $msg = @"
+Privacy Wipe will:
+
+• Clear the Windows clipboard
+• Delete all items from Windows Recent files
+
+This can freeze the app for an extended time if many recent items exist.
+
+Do you want to proceed?
+"@
+    $r = [System.Windows.Forms.MessageBox]::Show(
+        $msg,
+        "Privacy Wipe",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+    if ($r -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
     try { Set-Clipboard $null } catch {}
     Remove-Item "$env:APPDATA\Microsoft\Windows\Recent\*" -Force -EA SilentlyContinue
     [System.Windows.Forms.MessageBox]::Show("Clipboard + Recent files wiped")
