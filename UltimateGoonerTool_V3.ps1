@@ -52,17 +52,19 @@ function Write-Log($m) { Add-Content $logFile "$(Get-Date -Format 'yyyy-MM-dd HH
 function Save-LastSession($u) { $u | Set-Content $lastSession }
 
 # ---------- Settings ----------
-$autoClearOnExit  = $false
-$hornyLevel       = 3
-$isDarkTheme      = $false
-$startWithWindows = $false
+$autoClearOnExit        = $false
+$hornyLevel             = 3
+$isDarkTheme            = $false
+$startWithWindows       = $false
+$suppressGalleryWarning = $false
 
 if (Test-Path $settingsFile) {
     foreach ($line in (Get-Content $settingsFile)) {
-        if ($line -match "AutoClear=(True|False)")       { $autoClearOnExit  = [bool]::Parse($Matches[1]) }
-        if ($line -match "HornyLevel=(\d+)")              { $hornyLevel       = [int]$Matches[1] }
-        if ($line -match "DarkTheme=(True|False)")        { $isDarkTheme      = [bool]::Parse($Matches[1]) }
-        if ($line -match "StartWithWindows=(True|False)") { $startWithWindows = [bool]::Parse($Matches[1]) }
+        if ($line -match "AutoClear=(True|False)")              { $autoClearOnExit        = [bool]::Parse($Matches[1]) }
+        if ($line -match "HornyLevel=(\d+)")                     { $hornyLevel             = [int]$Matches[1] }
+        if ($line -match "DarkTheme=(True|False)")               { $isDarkTheme            = [bool]::Parse($Matches[1]) }
+        if ($line -match "StartWithWindows=(True|False)")        { $startWithWindows       = [bool]::Parse($Matches[1]) }
+        if ($line -match "SuppressGalleryWarning=(True|False)")  { $suppressGalleryWarning = [bool]::Parse($Matches[1]) }
     }
 }
 
@@ -72,6 +74,7 @@ AutoClear=$autoClearOnExit
 HornyLevel=$hornyLevel
 DarkTheme=$isDarkTheme
 StartWithWindows=$startWithWindows
+SuppressGalleryWarning=$suppressGalleryWarning
 "@ | Set-Content $settingsFile
 }
 
@@ -81,8 +84,92 @@ if (Test-Path $favoritesFile) {
 }
 function Save-Favorites { $favorites | Set-Content $favoritesFile }
 
-function Test-GalleryDL { try { $null = Get-Command gallery-dl -ErrorAction Stop; return $true } catch { return $false } }
-function Test-Ytdlp     { try { $null = Get-Command yt-dlp     -ErrorAction Stop; return $true } catch { return $false } }
+# Improved detection - works even when Scripts folder is not in PATH
+function Test-GalleryDL {
+    try {
+        $null = Get-Command gallery-dl -ErrorAction Stop
+        return $true
+    } catch {}
+    try {
+        $out = & python -m gallery_dl --version 2>$null
+        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
+    } catch {}
+    try {
+        $out = & py -m gallery_dl --version 2>$null
+        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
+    } catch {}
+    return $false
+}
+
+function Test-Ytdlp {
+    try {
+        $null = Get-Command yt-dlp -ErrorAction Stop
+        return $true
+    } catch {}
+    try {
+        $out = & python -m yt_dlp --version 2>$null
+        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
+    } catch {}
+    try {
+        $out = & py -m yt_dlp --version 2>$null
+        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
+    } catch {}
+    return $false
+}
+
+# Soft warning dialog
+function Show-GalleryWarning {
+    if ($suppressGalleryWarning) { return $true }
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = "gallery-dl"
+    $dlg.Size = New-Object System.Drawing.Size(440, 190)
+    $dlg.StartPosition = "CenterParent"
+    $dlg.FormBorderStyle = "FixedDialog"
+    $dlg.MaximizeBox = $false
+    $dlg.MinimizeBox = $false
+    $dlg.TopMost = $true
+
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Text = "gallery-dl not installed are you sure you want to proceed?"
+    $lbl.Location = New-Object System.Drawing.Point(20, 25)
+    $lbl.Size = New-Object System.Drawing.Size(390, 40)
+    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $dlg.Controls.Add($lbl)
+
+    $chk = New-Object System.Windows.Forms.CheckBox
+    $chk.Text = "Do not show error again"
+    $chk.Location = New-Object System.Drawing.Point(20, 75)
+    $chk.AutoSize = $true
+    $chk.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $dlg.Controls.Add($chk)
+
+    $btnYes = New-Object System.Windows.Forms.Button
+    $btnYes.Text = "Yes"
+    $btnYes.Size = New-Object System.Drawing.Size(90, 32)
+    $btnYes.Location = New-Object System.Drawing.Point(210, 115)
+    $btnYes.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+    $dlg.Controls.Add($btnYes)
+
+    $btnNo = New-Object System.Windows.Forms.Button
+    $btnNo.Text = "No"
+    $btnNo.Size = New-Object System.Drawing.Size(90, 32)
+    $btnNo.Location = New-Object System.Drawing.Point(310, 115)
+    $btnNo.DialogResult = [System.Windows.Forms.DialogResult]::No
+    $dlg.Controls.Add($btnNo)
+
+    $dlg.AcceptButton = $btnYes
+    $dlg.CancelButton = $btnNo
+
+    $result = $dlg.ShowDialog()
+
+    if ($chk.Checked) {
+        $script:suppressGalleryWarning = $true
+        Save-Settings
+    }
+
+    return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+}
 
 $downloadPath = "$configDir\Downloads"
 if (Test-Path $configFile) {
@@ -220,7 +307,6 @@ $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $true
 
-# Restore previous size/position only if valid
 if (Test-Path $windowFile) {
     try {
         $w = Get-Content $windowFile
@@ -570,32 +656,25 @@ $btnFull.Add_Click({
         "Full Goon Session",
         "20"
     )
-
     if ($input -notmatch '^\d+$') {
         [System.Windows.Forms.MessageBox]::Show("Please enter a valid number.")
         return
     }
-
     $count = [int]$input
-
     if ($count -lt 1) {
         [System.Windows.Forms.MessageBox]::Show("Number must be at least 1.")
         return
     }
-
     if ($count -gt $allSites.Count) {
         $count = $allSites.Count
         [System.Windows.Forms.MessageBox]::Show("Only $($allSites.Count) sites available. Opening all of them.")
     }
-
     $randomSites = $allSites | Get-Random -Count $count
     $urls = $randomSites | ForEach-Object { $_.U }
-
     foreach ($u in $urls) {
         Open-Browser $u
         Start-Sleep -Milliseconds 300
     }
-
     Start-Process $downloadPath
     Save-LastSession $urls
     Write-Log "Full Goon Session - $count unique random sites"
@@ -609,15 +688,32 @@ $btnOneUrl.Add_Click({
     $hasG = Test-GalleryDL
 
     if (-not $hasY -and -not $hasG) {
-        [System.Windows.Forms.MessageBox]::Show("Neither yt-dlp nor gallery-dl is installed.")
-        return
+        if (-not (Show-GalleryWarning)) { return }
     }
 
+    # Prefer yt-dlp, fall back to gallery-dl (including python -m versions)
     if ($hasY) {
-        $cmd = "yt-dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$url`"; if (`$LASTEXITCODE -ne 0) { gallery-dl -d `"$downloadPath`" `"$url`" }; pause"
+        $cmd = @"
+`$ErrorActionPreference = 'Continue'
+try { yt-dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$url`" } catch {}
+if (`$LASTEXITCODE -ne 0) {
+    try { python -m yt_dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$url`" } catch {}
+}
+if (`$LASTEXITCODE -ne 0) {
+    try { gallery-dl -d `"$downloadPath`" `"$url`" } catch {}
+    if (`$LASTEXITCODE -ne 0) { python -m gallery_dl -d `"$downloadPath`" `"$url`" }
+}
+pause
+"@
         Start-Process powershell -ArgumentList "-NoExit","-Command",$cmd
     } else {
-        Start-Process powershell -ArgumentList "-NoExit","-Command","gallery-dl -d `"$downloadPath`" `"$url`"; pause"
+        $cmd = @"
+`$ErrorActionPreference = 'Continue'
+try { gallery-dl -d `"$downloadPath`" `"$url`" } catch {}
+if (`$LASTEXITCODE -ne 0) { python -m gallery_dl -d `"$downloadPath`" `"$url`" }
+pause
+"@
+        Start-Process powershell -ArgumentList "-NoExit","-Command",$cmd
     }
 })
 
@@ -625,8 +721,26 @@ $btnQueue.Add_Click({
     $input = [Microsoft.VisualBasic.Interaction]::InputBox("Paste multiple links (one per line):","Queue")
     if ([string]::IsNullOrWhiteSpace($input)) { return }
     $urls = $input -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+
+    $hasY = Test-Ytdlp
+    $hasG = Test-GalleryDL
+
+    if (-not $hasY -and -not $hasG) {
+        if (-not (Show-GalleryWarning)) { return }
+    }
+
     foreach ($u in $urls) {
-        $cmd = "yt-dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$u`"; if (`$LASTEXITCODE -ne 0) { gallery-dl -d `"$downloadPath`" `"$u`" }"
+        $cmd = @"
+`$ErrorActionPreference = 'Continue'
+try { yt-dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$u`" } catch {}
+if (`$LASTEXITCODE -ne 0) {
+    try { python -m yt_dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$u`" } catch {}
+}
+if (`$LASTEXITCODE -ne 0) {
+    try { gallery-dl -d `"$downloadPath`" `"$u`" } catch {}
+    if (`$LASTEXITCODE -ne 0) { python -m gallery_dl -d `"$downloadPath`" `"$u`" }
+}
+"@
         Start-Process powershell -ArgumentList "-Command",$cmd
         Start-Sleep -Milliseconds 600
     }
@@ -646,8 +760,12 @@ $btnChangeFold.Add_Click({
     }
 })
 
-$btnInstallYtdlp.Add_Click({ Start-Process powershell -ArgumentList "-NoExit","-Command","python -m pip install -U yt-dlp; pause" })
-$btnInstallGallery.Add_Click({ Start-Process powershell -ArgumentList "-NoExit","-Command","python -m pip install -U gallery-dl; pause" })
+$btnInstallYtdlp.Add_Click({
+    Start-Process powershell -ArgumentList "-NoExit","-Command","python -m pip install -U yt-dlp; Write-Host ''; Write-Host 'Done. You can close this window.'; pause"
+})
+$btnInstallGallery.Add_Click({
+    Start-Process powershell -ArgumentList "-NoExit","-Command","python -m pip install -U gallery-dl; Write-Host ''; Write-Host 'Done. You can close this window.'; pause"
+})
 
 $btnLight.Add_Click({ $slider.Value = 1 })
 $btnNormal.Add_Click({ $slider.Value = 3 })
@@ -819,14 +937,13 @@ $btnBg.Add_Click({
     }
 })
 
-# ---------- Form Closing (no tray) ----------
+# ---------- Form Closing ----------
 $form.Add_FormClosing({
     if ($form.WindowState -ne "Minimized") {
         try {
             "$($form.Location.X)`n$($form.Location.Y)`n$($form.Size.Width)`n$($form.Size.Height)" | Set-Content $windowFile
         } catch {}
     }
-
     if ($autoClearOnExit) {
         "chrome","msedge","firefox","brave" | % { taskkill /F /IM "$_.exe" /T 2>$null | Out-Null }
         try { Set-Clipboard $null } catch {}
