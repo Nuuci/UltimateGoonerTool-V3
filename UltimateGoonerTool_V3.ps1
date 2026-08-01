@@ -84,40 +84,24 @@ if (Test-Path $favoritesFile) {
 }
 function Save-Favorites { $favorites | Set-Content $favoritesFile }
 
-# Improved detection - works even when Scripts folder is not in PATH
 function Test-GalleryDL {
-    try {
-        $null = Get-Command gallery-dl -ErrorAction Stop
-        return $true
-    } catch {}
-    try {
-        $out = & python -m gallery_dl --version 2>$null
-        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
-    } catch {}
-    try {
-        $out = & py -m gallery_dl --version 2>$null
-        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
-    } catch {}
+    try { $null = Get-Command gallery-dl -ErrorAction Stop; return $true } catch {}
+    try { $out = & python -m gallery_dl --version 2>$null; if ($LASTEXITCODE -eq 0 -or $out) { return $true } } catch {}
+    try { $out = & py -m gallery_dl --version 2>$null; if ($LASTEXITCODE -eq 0 -or $out) { return $true } } catch {}
     return $false
 }
 
 function Test-Ytdlp {
-    try {
-        $null = Get-Command yt-dlp -ErrorAction Stop
-        return $true
-    } catch {}
-    try {
-        $out = & python -m yt_dlp --version 2>$null
-        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
-    } catch {}
-    try {
-        $out = & py -m yt_dlp --version 2>$null
-        if ($LASTEXITCODE -eq 0 -or $out) { return $true }
-    } catch {}
+    try { $null = Get-Command yt-dlp -ErrorAction Stop; return $true } catch {}
+    try { $out = & python -m yt_dlp --version 2>$null; if ($LASTEXITCODE -eq 0 -or $out) { return $true } } catch {}
+    try { $out = & py -m yt_dlp --version 2>$null; if ($LASTEXITCODE -eq 0 -or $out) { return $true } } catch {}
     return $false
 }
 
-# Soft warning dialog
+function Test-FFmpeg {
+    try { $null = Get-Command ffmpeg -ErrorAction Stop; return $true } catch { return $false }
+}
+
 function Show-GalleryWarning {
     if ($suppressGalleryWarning) { return $true }
 
@@ -141,7 +125,6 @@ function Show-GalleryWarning {
     $chk.Text = "Do not show error again"
     $chk.Location = New-Object System.Drawing.Point(20, 75)
     $chk.AutoSize = $true
-    $chk.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $dlg.Controls.Add($chk)
 
     $btnYes = New-Object System.Windows.Forms.Button
@@ -169,6 +152,178 @@ function Show-GalleryWarning {
     }
 
     return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+}
+
+# ========== CONVERT DIALOG WITH PROGRESS ==========
+function Show-ConvertDialog {
+    if (-not (Test-FFmpeg)) {
+        $r = [System.Windows.Forms.MessageBox]::Show(
+            "ffmpeg is not installed.`n`nWould you like to open the download page?",
+            "ffmpeg required",
+            "YesNo"
+        )
+        if ($r -eq "Yes") { Start-Process "https://ffmpeg.org/download.html" }
+        return
+    }
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = "Convert Videos to MP4"
+    $dlg.Size = New-Object System.Drawing.Size(520, 320)
+    $dlg.StartPosition = "CenterParent"
+    $dlg.FormBorderStyle = "FixedDialog"
+    $dlg.MaximizeBox = $false
+    $dlg.MinimizeBox = $false
+
+    $lblMode = New-Object System.Windows.Forms.Label
+    $lblMode.Text = "Choose what to convert:"
+    $lblMode.Location = New-Object System.Drawing.Point(20, 20)
+    $lblMode.AutoSize = $true
+    $dlg.Controls.Add($lblMode)
+
+    $rbFile = New-Object System.Windows.Forms.RadioButton
+    $rbFile.Text = "Single video file"
+    $rbFile.Location = New-Object System.Drawing.Point(20, 50)
+    $rbFile.Checked = $true
+    $rbFile.AutoSize = $true
+    $dlg.Controls.Add($rbFile)
+
+    $rbFolder = New-Object System.Windows.Forms.RadioButton
+    $rbFolder.Text = "Entire folder"
+    $rbFolder.Location = New-Object System.Drawing.Point(180, 50)
+    $rbFolder.AutoSize = $true
+    $dlg.Controls.Add($rbFolder)
+
+    $txtPath = New-Object System.Windows.Forms.TextBox
+    $txtPath.Location = New-Object System.Drawing.Point(20, 90)
+    $txtPath.Size = New-Object System.Drawing.Size(360, 25)
+    $txtPath.ReadOnly = $true
+    $dlg.Controls.Add($txtPath)
+
+    $btnBrowse = New-Object System.Windows.Forms.Button
+    $btnBrowse.Text = "Browse..."
+    $btnBrowse.Location = New-Object System.Drawing.Point(390, 88)
+    $btnBrowse.Size = New-Object System.Drawing.Size(90, 28)
+    $dlg.Controls.Add($btnBrowse)
+
+    $lblStatus = New-Object System.Windows.Forms.Label
+    $lblStatus.Text = "Ready"
+    $lblStatus.Location = New-Object System.Drawing.Point(20, 135)
+    $lblStatus.Size = New-Object System.Drawing.Size(460, 20)
+    $dlg.Controls.Add($lblStatus)
+
+    $progress = New-Object System.Windows.Forms.ProgressBar
+    $progress.Location = New-Object System.Drawing.Point(20, 165)
+    $progress.Size = New-Object System.Drawing.Size(460, 25)
+    $progress.Minimum = 0
+    $progress.Maximum = 100
+    $progress.Value = 0
+    $dlg.Controls.Add($progress)
+
+    $btnStart = New-Object System.Windows.Forms.Button
+    $btnStart.Text = "Start Convert"
+    $btnStart.Location = New-Object System.Drawing.Point(250, 220)
+    $btnStart.Size = New-Object System.Drawing.Size(120, 35)
+    $btnStart.BackColor = [System.Drawing.Color]::FromArgb(0,150,90)
+    $btnStart.ForeColor = [System.Drawing.Color]::White
+    $btnStart.FlatStyle = "Flat"
+    $dlg.Controls.Add($btnStart)
+
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = "Close"
+    $btnClose.Location = New-Object System.Drawing.Point(380, 220)
+    $btnClose.Size = New-Object System.Drawing.Size(100, 35)
+    $btnClose.FlatStyle = "Flat"
+    $dlg.Controls.Add($btnClose)
+
+    $script:selectedPath = $null
+    $script:isFolder = $false
+
+    $btnBrowse.Add_Click({
+        if ($rbFile.Checked) {
+            $ofd = New-Object System.Windows.Forms.OpenFileDialog
+            $ofd.Filter = "Video files|*.m4v;*.mkv;*.webm;*.avi;*.mov;*.wmv;*.flv|All files|*.*"
+            $ofd.Title = "Select a video file"
+            if ($ofd.ShowDialog() -eq "OK") {
+                $script:selectedPath = $ofd.FileName
+                $script:isFolder = $false
+                $txtPath.Text = $script:selectedPath
+            }
+        } else {
+            $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
+            $fbd.Description = "Select folder containing videos"
+            if ($fbd.ShowDialog() -eq "OK") {
+                $script:selectedPath = $fbd.SelectedPath
+                $script:isFolder = $true
+                $txtPath.Text = $script:selectedPath
+            }
+        }
+    })
+
+    $btnStart.Add_Click({
+        if (-not $script:selectedPath) {
+            [System.Windows.Forms.MessageBox]::Show("Please select a file or folder first.")
+            return
+        }
+
+        $files = @()
+        if ($script:isFolder) {
+            $files = Get-ChildItem $script:selectedPath -File -Include *.m4v,*.mkv,*.webm,*.avi,*.mov,*.wmv,*.flv -ErrorAction SilentlyContinue
+        } else {
+            if (Test-Path $script:selectedPath) {
+                $files = @(Get-Item $script:selectedPath)
+            }
+        }
+
+        if ($files.Count -eq 0) {
+            [System.Windows.Forms.MessageBox]::Show("No convertible video files found.")
+            return
+        }
+
+        $btnStart.Enabled = $false
+        $btnBrowse.Enabled = $false
+        $progress.Value = 0
+        $progress.Maximum = $files.Count
+        $converted = 0
+        $failed = 0
+
+        for ($i = 0; $i -lt $files.Count; $i++) {
+            $f = $files[$i]
+            $lblStatus.Text = "Converting: $($f.Name)  ($($i+1)/$($files.Count))"
+            $progress.Value = $i
+            [System.Windows.Forms.Application]::DoEvents()
+
+            $out = [System.IO.Path]::ChangeExtension($f.FullName, ".mp4")
+            if (Test-Path $out) {
+                $converted++
+                continue
+            }
+
+            try {
+                $args = "-y -i `"$($f.FullName)`" -c copy `"$out`""
+                $p = Start-Process ffmpeg -ArgumentList $args -Wait -NoNewWindow -PassThru
+                if (Test-Path $out) {
+                    $converted++
+                    # Optionally delete original
+                    # Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+                } else {
+                    $failed++
+                }
+            } catch {
+                $failed++
+            }
+        }
+
+        $progress.Value = $files.Count
+        $lblStatus.Text = "Done! Converted: $converted   Failed: $failed"
+        $btnStart.Enabled = $true
+        $btnBrowse.Enabled = $true
+
+        [System.Windows.Forms.MessageBox]::Show("Conversion finished.`n`nConverted: $converted`nFailed: $failed")
+    })
+
+    $btnClose.Add_Click({ $dlg.Close() })
+
+    $null = $dlg.ShowDialog()
 }
 
 $downloadPath = "$configDir\Downloads"
@@ -422,7 +577,6 @@ foreach ($site in $allSites) {
     $flowSites.Controls.Add($b)
 }
 
-# Version label
 $lblVersion = New-Object System.Windows.Forms.Label
 $lblVersion.Text = "v.1.24"
 $lblVersion.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -501,6 +655,12 @@ $btnChangeFold.Text = "Change Download Folder"; $btnChangeFold.Location = New-Ob
 $btnChangeFold.Size = New-Object System.Drawing.Size(200,40); $btnChangeFold.FlatStyle = "Flat"
 $btnChangeFold.BackColor = [System.Drawing.Color]::FromArgb(40,40,40); $btnChangeFold.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnChangeFold)
+
+$btnConvert = New-Object System.Windows.Forms.Button
+$btnConvert.Text = "Convert Videos to MP4"; $btnConvert.Location = New-Object System.Drawing.Point(660,260)
+$btnConvert.Size = New-Object System.Drawing.Size(180,40); $btnConvert.FlatStyle = "Flat"
+$btnConvert.BackColor = [System.Drawing.Color]::FromArgb(180,80,20); $btnConvert.ForeColor = [System.Drawing.Color]::White
+$panelDownload.Controls.Add($btnConvert)
 
 $btnInstallYtdlp = New-Object System.Windows.Forms.Button
 $btnInstallYtdlp.Text = "Install yt-dlp"; $btnInstallYtdlp.Location = New-Object System.Drawing.Point(20,320)
@@ -691,13 +851,14 @@ $btnOneUrl.Add_Click({
         if (-not (Show-GalleryWarning)) { return }
     }
 
-    # Prefer yt-dlp, fall back to gallery-dl (including python -m versions)
+    $format = "-f `"bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best`""
+
     if ($hasY) {
         $cmd = @"
 `$ErrorActionPreference = 'Continue'
-try { yt-dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$url`" } catch {}
+try { yt-dlp $format -o `"$downloadPath\%(title)s.%(ext)s`" `"$url`" } catch {}
 if (`$LASTEXITCODE -ne 0) {
-    try { python -m yt_dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$url`" } catch {}
+    try { python -m yt_dlp $format -o `"$downloadPath\%(title)s.%(ext)s`" `"$url`" } catch {}
 }
 if (`$LASTEXITCODE -ne 0) {
     try { gallery-dl -d `"$downloadPath`" `"$url`" } catch {}
@@ -729,12 +890,14 @@ $btnQueue.Add_Click({
         if (-not (Show-GalleryWarning)) { return }
     }
 
+    $format = "-f `"bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best`""
+
     foreach ($u in $urls) {
         $cmd = @"
 `$ErrorActionPreference = 'Continue'
-try { yt-dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$u`" } catch {}
+try { yt-dlp $format -o `"$downloadPath\%(title)s.%(ext)s`" `"$u`" } catch {}
 if (`$LASTEXITCODE -ne 0) {
-    try { python -m yt_dlp -o `"$downloadPath\%(title)s.%(ext)s`" `"$u`" } catch {}
+    try { python -m yt_dlp $format -o `"$downloadPath\%(title)s.%(ext)s`" `"$u`" } catch {}
 }
 if (`$LASTEXITCODE -ne 0) {
     try { gallery-dl -d `"$downloadPath`" `"$u`" } catch {}
@@ -748,7 +911,7 @@ if (`$LASTEXITCODE -ne 0) {
 
 $btnOpenFold.Add_Click({ Start-Process $downloadPath })
 $btnPlay.Add_Click({
-    $f = Get-ChildItem "$downloadPath\*.mp4" -EA SilentlyContinue | Sort LastWriteTime -Desc | Select -First 1
+    $f = Get-ChildItem "$downloadPath\*.*" -Include *.mp4,*.m4v,*.mkv,*.webm -ErrorAction SilentlyContinue | Sort LastWriteTime -Desc | Select -First 1
     if ($f) { Start-Process $f.FullName } else { [System.Windows.Forms.MessageBox]::Show("No videos found") }
 })
 $btnChangeFold.Add_Click({
@@ -759,6 +922,8 @@ $btnChangeFold.Add_Click({
         $lblPath.Text = "Current folder: $script:downloadPath"
     }
 })
+
+$btnConvert.Add_Click({ Show-ConvertDialog })
 
 $btnInstallYtdlp.Add_Click({
     Start-Process powershell -ArgumentList "-NoExit","-Command","python -m pip install -U yt-dlp; Write-Host ''; Write-Host 'Done. You can close this window.'; pause"
@@ -814,7 +979,7 @@ $btnUpdate.Add_Click({
 })
 
 $btnGoonTo.Add_Click({
-    $files = Get-ChildItem "$downloadPath\*.mp4" -EA SilentlyContinue
+    $files = Get-ChildItem "$downloadPath\*.*" -Include *.mp4,*.m4v,*.mkv -ErrorAction SilentlyContinue
     if ($files -and (Get-Random -Max 2) -eq 0) {
         Start-Process (Get-Random $files).FullName
         [System.Windows.Forms.MessageBox]::Show("GOON TO THIS VIDEO.")
@@ -837,7 +1002,7 @@ $btnSpin.Add_Click({
     $opts = @("Local Video","Pornhub","RedGIFs","SpankBang","r/GOONED","nhentai","Erome","Random Tag")
     $p = Get-Random $opts
     switch ($p) {
-        "Local Video" { $f = Get-ChildItem "$downloadPath\*.mp4" -EA SilentlyContinue; if ($f) { Start-Process (Get-Random $f).FullName } }
+        "Local Video" { $f = Get-ChildItem "$downloadPath\*.*" -Include *.mp4,*.m4v -ErrorAction SilentlyContinue; if ($f) { Start-Process (Get-Random $f).FullName } }
         "Pornhub" { Open-Browser "https://www.pornhub.com/" }
         "RedGIFs" { Open-Browser "https://www.redgifs.com/" }
         "SpankBang" { Open-Browser "https://spankbang.com/" }
@@ -937,7 +1102,6 @@ $btnBg.Add_Click({
     }
 })
 
-# ---------- Form Closing ----------
 $form.Add_FormClosing({
     if ($form.WindowState -ne "Minimized") {
         try {
@@ -950,7 +1114,6 @@ $form.Add_FormClosing({
     }
 })
 
-# Navigation
 function Show-Panel($p) {
     $panelHome.Visible = $false
     $panelDownload.Visible = $false
