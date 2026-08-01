@@ -57,6 +57,7 @@ $hornyLevel             = 3
 $isDarkTheme            = $false
 $startWithWindows       = $false
 $suppressGalleryWarning = $false
+$suppressFfmpegWarning  = $false
 
 if (Test-Path $settingsFile) {
     foreach ($line in (Get-Content $settingsFile)) {
@@ -65,6 +66,7 @@ if (Test-Path $settingsFile) {
         if ($line -match "DarkTheme=(True|False)")               { $isDarkTheme            = [bool]::Parse($Matches[1]) }
         if ($line -match "StartWithWindows=(True|False)")        { $startWithWindows       = [bool]::Parse($Matches[1]) }
         if ($line -match "SuppressGalleryWarning=(True|False)")  { $suppressGalleryWarning = [bool]::Parse($Matches[1]) }
+        if ($line -match "SuppressFfmpegWarning=(True|False)")   { $suppressFfmpegWarning  = [bool]::Parse($Matches[1]) }
     }
 }
 
@@ -75,6 +77,7 @@ HornyLevel=$hornyLevel
 DarkTheme=$isDarkTheme
 StartWithWindows=$startWithWindows
 SuppressGalleryWarning=$suppressGalleryWarning
+SuppressFfmpegWarning=$suppressFfmpegWarning
 "@ | Set-Content $settingsFile
 }
 
@@ -154,15 +157,61 @@ function Show-GalleryWarning {
     return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
 }
 
+function Show-FfmpegWarning {
+    if ($suppressFfmpegWarning) { return $true }
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = "ffmpeg"
+    $dlg.Size = New-Object System.Drawing.Size(440, 190)
+    $dlg.StartPosition = "CenterParent"
+    $dlg.FormBorderStyle = "FixedDialog"
+    $dlg.MaximizeBox = $false
+    $dlg.MinimizeBox = $false
+    $dlg.TopMost = $true
+
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Text = "ffmpeg is not installed. Are you sure you want to continue anyway?"
+    $lbl.Location = New-Object System.Drawing.Point(20, 25)
+    $lbl.Size = New-Object System.Drawing.Size(390, 40)
+    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $dlg.Controls.Add($lbl)
+
+    $chk = New-Object System.Windows.Forms.CheckBox
+    $chk.Text = "Do not show this again"
+    $chk.Location = New-Object System.Drawing.Point(20, 75)
+    $chk.AutoSize = $true
+    $dlg.Controls.Add($chk)
+
+    $btnYes = New-Object System.Windows.Forms.Button
+    $btnYes.Text = "Yes"
+    $btnYes.Size = New-Object System.Drawing.Size(90, 32)
+    $btnYes.Location = New-Object System.Drawing.Point(210, 115)
+    $btnYes.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+    $dlg.Controls.Add($btnYes)
+
+    $btnNo = New-Object System.Windows.Forms.Button
+    $btnNo.Text = "No"
+    $btnNo.Size = New-Object System.Drawing.Size(90, 32)
+    $btnNo.Location = New-Object System.Drawing.Point(310, 115)
+    $btnNo.DialogResult = [System.Windows.Forms.DialogResult]::No
+    $dlg.Controls.Add($btnNo)
+
+    $dlg.AcceptButton = $btnYes
+    $dlg.CancelButton = $btnNo
+
+    $result = $dlg.ShowDialog()
+
+    if ($chk.Checked) {
+        $script:suppressFfmpegWarning = $true
+        Save-Settings
+    }
+
+    return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+}
+
 function Show-ConvertDialog {
     if (-not (Test-FFmpeg)) {
-        $r = [System.Windows.Forms.MessageBox]::Show(
-            "ffmpeg is not installed.`n`nWould you like to open the download page?",
-            "ffmpeg required",
-            "YesNo"
-        )
-        if ($r -eq "Yes") { Start-Process "https://ffmpeg.org/download.html" }
-        return
+        if (-not (Show-FfmpegWarning)) { return }
     }
 
     $dlg = New-Object System.Windows.Forms.Form
