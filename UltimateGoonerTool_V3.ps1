@@ -154,7 +154,6 @@ function Show-GalleryWarning {
     return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
 }
 
-# ========== CONVERT DIALOG WITH PROGRESS ==========
 function Show-ConvertDialog {
     if (-not (Test-FFmpeg)) {
         $r = [System.Windows.Forms.MessageBox]::Show(
@@ -303,8 +302,6 @@ function Show-ConvertDialog {
                 $p = Start-Process ffmpeg -ArgumentList $args -Wait -NoNewWindow -PassThru
                 if (Test-Path $out) {
                     $converted++
-                    # Optionally delete original
-                    # Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
                 } else {
                     $failed++
                 }
@@ -354,7 +351,6 @@ $captions = @(
     "Porn owns you. Accept it."
 )
 
-# ---------- REAL UNIQUE SITES ----------
 $allSites = @(
     @{N="Pornhub";U="https://www.pornhub.com/"},
     @{N="Xvideos";U="https://www.xvideos.com/"},
@@ -438,7 +434,6 @@ $allSites = @(
     @{N="RedGIFs Explore";U="https://www.redgifs.com/browse"}
 )
 
-# ---------- First-time setup ----------
 if (-not (Test-Path $setupDoneFile)) {
     $f = New-Object System.Windows.Forms.Form
     $f.Text = "Setup"; $f.Size = New-Object System.Drawing.Size(520,280); $f.StartPosition = "CenterScreen"
@@ -453,7 +448,6 @@ if (-not (Test-Path $setupDoneFile)) {
     Set-Content $setupDoneFile "done"
 }
 
-# ---------- Main Form ----------
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "UltimateGoonerTool V3"
 $form.Size = New-Object System.Drawing.Size(1280, 820)
@@ -485,7 +479,6 @@ if (Test-Path $bgImage) {
     } catch {}
 }
 
-# ===== SIDEBAR =====
 $sidebar = New-Object System.Windows.Forms.Panel
 $sidebar.Location = New-Object System.Drawing.Point(0,0)
 $sidebar.Size = New-Object System.Drawing.Size(190,820)
@@ -524,7 +517,6 @@ $btnSideFavs     = New-SideBtn "Favorites" 270
 $btnSidePrivacy  = New-SideBtn "Privacy Wipe" 330
 $btnSideExit     = New-SideBtn "Exit" 740
 
-# ===== CONTENT PANELS =====
 function New-ContentPanel {
     $p = New-Object System.Windows.Forms.Panel
     $p.Location = New-Object System.Drawing.Point(190,0)
@@ -541,7 +533,6 @@ $panelDownload = New-ContentPanel
 $panelTools    = New-ContentPanel
 $panelFavs     = New-ContentPanel
 
-# ========== HOME ==========
 $lblHomeTitle = New-Object System.Windows.Forms.Label
 $lblHomeTitle.Text = "Working Sites • Click any to open"
 $lblHomeTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
@@ -586,7 +577,6 @@ $lblVersion.Location = New-Object System.Drawing.Point(1180, 785)
 $lblVersion.AutoSize = $true
 $form.Controls.Add($lblVersion)
 
-# ========== DOWNLOAD ==========
 $lblDL = New-Object System.Windows.Forms.Label
 $lblDL.Text = "Download Center • yt-dlp (main) → gallery-dl (fallback)"
 $lblDL.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
@@ -674,9 +664,9 @@ $btnInstallGallery.Size = New-Object System.Drawing.Size(160,40); $btnInstallGal
 $btnInstallGallery.BackColor = [System.Drawing.Color]::FromArgb(30,100,180); $btnInstallGallery.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnInstallGallery)
 
-# ========== TOOLS ==========
 $lblTools = New-Object System.Windows.Forms.Label
-$lblTools.Text = "Tools, Sliders & Session Controls"
+$lblTools.Text = "Tools, Sli
+ders & Session Controls"
 $lblTools.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $lblTools.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::FromArgb(30,30,30) }
 $lblTools.Location = New-Object System.Drawing.Point(20,15)
@@ -778,7 +768,6 @@ $btnCloseAll  = New-Tool "Close All Browsers" 20 430 220
 $btnBg        = New-Tool "Change Background" 260 430 200
 $btnUpdate    = New-Tool "Check for Updates" 480 430 200
 
-# ========== FAVORITES ==========
 $lblFav = New-Object System.Windows.Forms.Label
 $lblFav.Text = "Your Favorites"
 $lblFav.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
@@ -809,7 +798,6 @@ function Refresh-Favorites {
     }
 }
 
-# ---------- HANDLERS ----------
 $btnFull.Add_Click({
     $input = [Microsoft.VisualBasic.Interaction]::InputBox(
         "How many random sites do you want to open?`n`n(Recommended: 10 - 40)",
