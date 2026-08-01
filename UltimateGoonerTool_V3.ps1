@@ -665,8 +665,7 @@ $btnInstallGallery.BackColor = [System.Drawing.Color]::FromArgb(30,100,180); $bt
 $panelDownload.Controls.Add($btnInstallGallery)
 
 $lblTools = New-Object System.Windows.Forms.Label
-$lblTools.Text = "Tools, Sli
-ders & Session Controls"
+$lblTools.Text = "Tools, Sliders & Session Controls"
 $lblTools.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $lblTools.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::FromArgb(30,30,30) }
 $lblTools.Location = New-Object System.Drawing.Point(20,15)
