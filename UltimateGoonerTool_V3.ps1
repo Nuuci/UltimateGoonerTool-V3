@@ -101,8 +101,48 @@ function Test-Ytdlp {
     return $false
 }
 
+$script:ffmpegPath = $null
+
+function Find-FFmpeg {
+    # 1. PATH via Get-Command
+    try {
+        $cmd = Get-Command ffmpeg -ErrorAction Stop
+        if ($cmd -and $cmd.Source) { return $cmd.Source }
+    } catch {}
+
+    # 2. where.exe
+    try {
+        $where = & where.exe ffmpeg 2>$null
+        if ($where) {
+            $first = ($where | Select-Object -First 1).Trim()
+            if (Test-Path $first) { return $first }
+        }
+    } catch {}
+
+    # 3. Common install locations
+    $candidates = @(
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ffmpeg.exe",
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg-*\bin\ffmpeg.exe",
+        "C:\ffmpeg\bin\ffmpeg.exe",
+        "C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+        "C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
+        "$env:USERPROFILE\scoop\shims\ffmpeg.exe",
+        "$env:USERPROFILE\scoop\apps\ffmpeg\current\bin\ffmpeg.exe",
+        "$env:ProgramData\chocolatey\bin\ffmpeg.exe",
+        "$env:LOCALAPPDATA\Programs\ffmpeg\bin\ffmpeg.exe"
+    )
+    foreach ($c in $candidates) {
+        $resolved = Get-Item $c -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($resolved -and (Test-Path $resolved.FullName)) { return $resolved.FullName }
+    }
+
+    return $null
+}
+
 function Test-FFmpeg {
-    try { $null = Get-Command ffmpeg -ErrorAction Stop; return $true } catch { return $false }
+    if ($script:ffmpegPath -and (Test-Path $script:ffmpegPath)) { return $true }
+    $script:ffmpegPath = Find-FFmpeg
+    return [bool]$script:ffmpegPath
 }
 
 function Show-GalleryWarning {
@@ -347,8 +387,9 @@ function Show-ConvertDialog {
             }
 
             try {
+                $ff = if ($script:ffmpegPath) { $script:ffmpegPath } else { "ffmpeg" }
                 $args = "-y -i `"$($f.FullName)`" -c copy `"$out`""
-                $p = Start-Process ffmpeg -ArgumentList $args -Wait -NoNewWindow -PassThru
+                $p = Start-Process $ff -ArgumentList $args -Wait -NoNewWindow -PassThru
                 if (Test-Path $out) {
                     $converted++
                 } else {
