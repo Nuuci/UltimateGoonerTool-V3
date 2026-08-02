@@ -162,14 +162,17 @@ function Get-GalleryDlExpectedCount {
         [string]$CookieBrowser = "chrome"
     )
     $count = 0
+    $cookiesFile = Join-Path $configDir "cookies.txt"
     try {
+        $cookieArg = if (Test-Path $cookiesFile) { "--cookies `"$cookiesFile`"" } else { "--cookies-from-browser $CookieBrowser" }
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = "powershell.exe"
-        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { `$ErrorActionPreference='SilentlyContinue'; if (Get-Command gallery-dl -EA SilentlyContinue) { gallery-dl -g --cookies-from-browser $CookieBrowser '$Url' } else { python -m gallery_dl -g --cookies-from-browser $CookieBrowser '$Url' } }`""
+        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { `$ErrorActionPreference='SilentlyContinue'; if (Get-Command gallery-dl -EA SilentlyContinue) { gallery-dl -g $cookieArg '$Url' } else { python -m gallery_dl -g $cookieArg '$Url' } }`""
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
+        $psi.WorkingDirectory = if (Test-Path $downloadPath) { $downloadPath } else { $env:USERPROFILE }
         $p = [System.Diagnostics.Process]::Start($psi)
         $out = $p.StandardOutput.ReadToEnd()
         $null = $p.StandardError.ReadToEnd()
@@ -237,6 +240,7 @@ L "Finished LASTEXITCODE=`$LASTEXITCODE"
     $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
     $psi.CreateNoWindow = $true
     $psi.UseShellExecute = $false
+    $psi.WorkingDirectory = if (Test-Path $downloadPath) { $downloadPath } else { $env:USERPROFILE }
 
     try {
         $p = [System.Diagnostics.Process]::Start($psi)
@@ -1209,34 +1213,39 @@ $btnOneUrl.Add_Click({
         if (-not (Show-GalleryWarning)) { return }
     }
 
+    Show-CookiesSetupPrompt
+
     $cookieBrowser = Get-CookieBrowserName
 
     $expected = Get-GalleryDlExpectedCount -Url $url -CookieBrowser $cookieBrowser
     if ($expected -le 0) { $expected = 0 }
 
+    $cookiesFile = Join-Path $configDir "cookies.txt"
     $cmd = @"
 L "URL: $url"
 L "Dest: $downloadPath"
-L "Browser cookies: $cookieBrowser"
+L "Cookies file: $cookiesFile"
 L "Expected items: $expected"
+Set-Location -LiteralPath '$downloadPath'
+L "cwd now: `$(Get-Location)"
 if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-    L 'Running: gallery-dl --cookies-from-browser $cookieBrowser -d "$downloadPath" "$url"'
-    & gallery-dl --cookies-from-browser $cookieBrowser -d "$downloadPath" "$url"
+    L 'Running: gallery-dl -D . --cookies "$cookiesFile" "$url"'
+    & gallery-dl -D . --cookies "$cookiesFile" "$url"
 } else {
-    L 'Running: python -m gallery_dl --cookies-from-browser $cookieBrowser -d "$downloadPath" "$url"'
-    & python -m gallery_dl --cookies-from-browser $cookieBrowser -d "$downloadPath" "$url"
+    L 'Running: python -m gallery_dl -D . --cookies "$cookiesFile" "$url"'
+    & python -m gallery_dl -D . --cookies "$cookiesFile" "$url"
 }
 if (`$LASTEXITCODE -ne 0) {
     L 'Retry without cookies...'
     if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-        & gallery-dl -d "$downloadPath" "$url"
+        & gallery-dl -D . "$url"
     } else {
-        & python -m gallery_dl -d "$downloadPath" "$url"
+        & python -m gallery_dl -D . "$url"
     }
 }
 if (`$LASTEXITCODE -ne 0 -and (Get-Command yt-dlp -ErrorAction SilentlyContinue)) {
     L 'Fallback yt-dlp...'
-    & yt-dlp -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best" -o "$(Join-Path $downloadPath '%(title)s.%(ext)s')" "$url"
+    & yt-dlp -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best" -o "%(title)s.%(ext)s" "$url"
 }
 L "Done exit=`$LASTEXITCODE"
 "@
@@ -1256,27 +1265,32 @@ $btnQueue.Add_Click({
         if (-not (Show-GalleryWarning)) { return }
     }
 
+    Show-CookiesSetupPrompt
+
     $cookieBrowser = Get-CookieBrowserName
     $total = $urls.Count
     $n = 0
     foreach ($u in $urls) {
         $n++
         $expected = Get-GalleryDlExpectedCount -Url $u -CookieBrowser $cookieBrowser
+        $cookiesFile = Join-Path $configDir "cookies.txt"
         $cmd = @"
 L "QUEUE $n / $total"
 L "URL: $u"
-L "Browser cookies: $cookieBrowser"
+L "Cookies file: $cookiesFile"
+Set-Location -LiteralPath '$downloadPath'
+L "cwd now: `$(Get-Location)"
 if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-    L 'Running: gallery-dl --cookies-from-browser $cookieBrowser -d "$downloadPath" "$u"'
-    & gallery-dl --cookies-from-browser $cookieBrowser -d "$downloadPath" "$u"
+    L 'Running: gallery-dl -D . --cookies "$cookiesFile" "$u"'
+    & gallery-dl -D . --cookies "$cookiesFile" "$u"
 } else {
-    & python -m gallery_dl --cookies-from-browser $cookieBrowser -d "$downloadPath" "$u"
+    & python -m gallery_dl -D . --cookies "$cookiesFile" "$u"
 }
 if (`$LASTEXITCODE -ne 0) {
     if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-        & gallery-dl -d "$downloadPath" "$u"
+        & gallery-dl -D . "$u"
     } else {
-        & python -m gallery_dl -d "$downloadPath" "$u"
+        & python -m gallery_dl -D . "$u"
     }
 }
 L "Item done exit=`$LASTEXITCODE"
@@ -1590,8 +1604,68 @@ function Show-Panel($p) {
     $p.BringToFront()
 }
 
+function Show-CookiesSetupPrompt {
+    $cookiesFile = Join-Path $configDir "cookies.txt"
+    if (Test-Path $cookiesFile) { return }
+
+    $msg = @"
+cookies.txt is not set up.
+
+Without it you will only be able to download from public sites.
+Login-required sites (Luscious members, many galleries, etc.) will fail.
+
+Do you want to set up cookies.txt right now?
+"@
+    $r = [System.Windows.Forms.MessageBox]::Show(
+        $msg,
+        "Cookies Setup Needed",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Information
+    )
+    if ($r -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+    # Open the folder
+    try { Start-Process explorer.exe $configDir } catch {}
+
+    # Create and open instructions notepad
+    $instrPath = Join-Path $configDir "HOW_TO_SETUP_COOKIES.txt"
+    $instructions = @"
+HOW TO SET UP cookies.txt FOR UltimateGoonerTool
+================================================
+
+1. Install the Cookie Exporter Chrome extension:
+   https://chromewebstore.google.com/detail/cookie-exporter/fhnmmidekmgocpjdceeffppcodigillk?hl=en
+
+2. Go to the site you want (example: https://members.luscious.net) and LOG IN.
+
+3. Click the Cookie Exporter extension icon.
+
+4. Set Export Format to: Netscape
+
+5. Click Export / Download.
+
+6. Move or save the downloaded file into this exact folder:
+   $configDir
+
+7. Rename the file to exactly: cookies.txt
+   (must be named cookies.txt - no extra numbers or extensions)
+
+8. Close this UltimateGoonerTool completely and reopen it.
+
+After that, downloads from login-required sites should work.
+
+You can delete this HOW_TO_SETUP_COOKIES.txt file once you are done.
+"@
+    try {
+        Set-Content -Path $instrPath -Value $instructions -Encoding UTF8
+        Start-Process notepad.exe $instrPath
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Could not create instructions file.`nJust put cookies.txt in:`n$configDir")
+    }
+}
+
 $btnSideHome.Add_Click({ Show-Panel $panelHome })
-$btnSideDownload.Add_Click({ Show-Panel $panelDownload })
+$btnSideDownload.Add_Click({ Show-CookiesSetupPrompt; Show-Panel $panelDownload })
 $btnSideTools.Add_Click({ Show-Panel $panelTools })
 $btnSideFavs.Add_Click({ Refresh-Favorites; Show-Panel $panelFavs })
 
@@ -1622,15 +1696,19 @@ Write-Host "Current: `$(Get-Location)"
 Write-Host ''
 Write-Host 'Useful commands:'
 Write-Host '  yt-dlp -f best -o "%(title)s.%(ext)s" "URL"'
-Write-Host '  gallery-dl --cookies-from-browser chrome -d . "URL"'
-Write-Host '  gallery-dl -d . "URL"'
+Write-Host '  gallery-dl -D . --cookies (Documents\ULTIMATE GOONER TOOL v5\cookies.txt) "URL"'
+Write-Host '  gallery-dl -D . "URL"'
 Write-Host '  Get-Command yt-dlp, gallery-dl, ffmpeg'
 Write-Host ''
 "@
     $tmpHelp = Join-Path $env:TEMP "ugt_console_help.ps1"
     try {
         Write-Utf8NoBom -Path $tmpHelp -Content $helpCmd
-        Start-Process powershell.exe -ArgumentList "-NoExit","-ExecutionPolicy","Bypass","-File","`"$tmpHelp`""
+        $helpPsi = New-Object System.Diagnostics.ProcessStartInfo
+        $helpPsi.FileName = "powershell.exe"
+        $helpPsi.Arguments = "-NoExit -ExecutionPolicy Bypass -File `"$tmpHelp`""
+        $helpPsi.WorkingDirectory = if (Test-Path $downloadPath) { $downloadPath } else { $env:USERPROFILE }
+        [System.Diagnostics.Process]::Start($helpPsi) | Out-Null
     } catch {
         Start-Process powershell.exe -ArgumentList "-NoExit","-Command","Set-Location -LiteralPath '$downloadPath'"
     }
