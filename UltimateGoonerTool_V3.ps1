@@ -1,6 +1,6 @@
 # ============================================================
 # UltimateGoonerTool V3 - Final Portable Edition
-# Version: v.1.24 (Console Hidden)
+# Version: v.1.26 (Console Hidden)
 # ============================================================
 
 Add-Type -Name Window -Namespace Console -MemberDefinition '
@@ -40,6 +40,26 @@ $defaultBg      = Join-Path $PSScriptRoot "background.jpg"
 $setupDoneFile  = Join-Path $configDir "setup_done.txt"
 
 if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+
+# Free & open source notice (always present)
+$freeNoticeFile = Join-Path $configDir "FREE_AND_OPEN_SOURCE.txt"
+$freeNotice = @"
+UltimateGoonerTool V3 - FREE AND OPEN SOURCE
+============================================
+
+This program is completely free and open.
+
+- Source code is free to use, copy, modify, redistribute, and manipulate in any way.
+- No license is required.
+- No permission needed.
+- Do whatever you want with it.
+
+There are no restrictions, no copyright claims, no attribution requirements.
+This is a free and open program made for the community.
+
+Enjoy and goon freely.
+"@
+try { Set-Content -Path $freeNoticeFile -Value $freeNotice -Encoding UTF8 -Force } catch {}
 
 # ---------- Browser ----------
 $preferredBrowser = $null
@@ -81,6 +101,17 @@ function Get-CookieBrowserName {
     }
 }
 
+function Get-CookieFiles {
+    $list = [System.Collections.Generic.List[string]]::new()
+    $primary = Join-Path $configDir "cookies.txt"
+    if (Test-Path -LiteralPath $primary) { $list.Add($primary) }
+    for ($i = 1; $i -le 1000; $i++) {
+        $f = Join-Path $configDir "cookies$i.txt"
+        if (Test-Path -LiteralPath $f) { $list.Add($f) }
+    }
+    return $list.ToArray()
+}
+
 function Write-Log($m) { Add-Content $logFile "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $m" }
 function Save-LastSession($u) { $u | Set-Content $lastSession }
 
@@ -99,7 +130,7 @@ function Show-DownloadProgress {
     )
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = $Title
-    $dlg.Size = New-Object System.Drawing.Size(520, 200)
+    $dlg.Size = New-Object System.Drawing.Size(520, 250)
     $dlg.StartPosition = "CenterScreen"
     $dlg.FormBorderStyle = "FixedDialog"
     $dlg.MaximizeBox = $false
@@ -107,6 +138,7 @@ function Show-DownloadProgress {
     $dlg.ControlBox = $true
     $dlg.TopMost = $true
     $dlg.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+    $dlg.Tag = $false   # true = user cancelled
 
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Text = $Status
@@ -141,19 +173,42 @@ function Show-DownloadProgress {
     $lblPct.ForeColor = [System.Drawing.Color]::LightGray
     $dlg.Controls.Add($lblPct)
 
-    return @{ Form = $dlg; Label = $lbl; Detail = $lblDetail; Bar = $bar; Pct = $lblPct }
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = "CANCEL DOWNLOAD"
+    $btnCancel.Location = New-Object System.Drawing.Point(140, 175)
+    $btnCancel.Size = New-Object System.Drawing.Size(240, 38)
+    $btnCancel.FlatStyle = "Flat"
+    $btnCancel.BackColor = [System.Drawing.Color]::FromArgb(180, 40, 40)
+    $btnCancel.ForeColor = [System.Drawing.Color]::White
+    $btnCancel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnCancel.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $btnCancel.Add_Click({
+        $this.FindForm().Tag = $true
+        try { $this.FindForm().Close() } catch {}
+    })
+    $dlg.Controls.Add($btnCancel)
+
+    # X button or Alt+F4 also counts as cancel
+    $dlg.Add_FormClosing({
+        param($sender, $e)
+        $sender.Tag = $true
+    })
+
+    return @{ Form = $dlg; Label = $lbl; Detail = $lblDetail; Bar = $bar; Pct = $lblPct; CancelBtn = $btnCancel }
 }
 
 function Update-DownloadProgress {
     param($Prog, [string]$Status, [string]$Detail, [int]$Percent)
-    if (-not $Prog) { return }
-    if ($Status) { $Prog.Label.Text = $Status }
-    if ($Detail) { $Prog.Detail.Text = $Detail }
-    if ($Percent -lt 0) { $Percent = 0 }
-    if ($Percent -gt 100) { $Percent = 100 }
-    $Prog.Bar.Value = $Percent
-    $Prog.Pct.Text = "$Percent%  |  $($Prog.Detail.Text)"
-    [System.Windows.Forms.Application]::DoEvents()
+    if (-not $Prog -or -not $Prog.Form -or $Prog.Form.IsDisposed) { return }
+    try {
+        if ($Status) { $Prog.Label.Text = $Status }
+        if ($Detail) { $Prog.Detail.Text = $Detail }
+        if ($Percent -lt 0) { $Percent = 0 }
+        if ($Percent -gt 100) { $Percent = 100 }
+        $Prog.Bar.Value = $Percent
+        $Prog.Pct.Text = "$Percent%  |  $($Prog.Detail.Text)"
+        [System.Windows.Forms.Application]::DoEvents()
+    } catch {}
 }
 
 function Get-GalleryDlExpectedCount {
@@ -162,23 +217,102 @@ function Get-GalleryDlExpectedCount {
         [string]$CookieBrowser = "chrome"
     )
     $count = 0
-    $cookiesFile = Join-Path $configDir "cookies.txt"
     try {
-        $cookieArg = if (Test-Path $cookiesFile) { "--cookies `"$cookiesFile`"" } else { "--cookies-from-browser $CookieBrowser" }
+        $cookieFiles = Get-CookieFiles
+        $argList = [System.Collections.Generic.List[string]]::new()
+        $argList.Add("-g")
+
+        if ($cookieFiles.Count -gt 0) {
+            foreach ($cf in $cookieFiles) {
+                $argList.Add("--cookies")
+                $argList.Add($cf)
+            }
+        } else {
+            $argList.Add("--cookies-from-browser")
+            $argList.Add($CookieBrowser)
+        }
+        $argList.Add($Url)
+
+        $exe = $null
+        $useModule = $false
+        if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
+            $exe = "gallery-dl"
+        } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+            $exe = "python"
+            $useModule = $true
+        } elseif (Get-Command py -ErrorAction SilentlyContinue) {
+            $exe = "py"
+            $useModule = $true
+        }
+
+        if (-not $exe) { return 0 }
+
         $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "powershell.exe"
-        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { `$ErrorActionPreference='SilentlyContinue'; if (Get-Command gallery-dl -EA SilentlyContinue) { gallery-dl -g $cookieArg '$Url' } else { python -m gallery_dl -g $cookieArg '$Url' } }`""
+        $psi.FileName = $exe
+        if ($useModule) {
+            $psi.Arguments = "-m gallery_dl " + ($argList | ForEach-Object {
+                if ($_ -match '\s') { "`"$_`"" } else { $_ }
+            }) -join " "
+        } else {
+            $psi.Arguments = ($argList | ForEach-Object {
+                if ($_ -match '\s') { "`"$_`"" } else { $_ }
+            }) -join " "
+        }
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
         $psi.WorkingDirectory = if (Test-Path $downloadPath) { $downloadPath } else { $env:USERPROFILE }
+
         $p = [System.Diagnostics.Process]::Start($psi)
         $out = $p.StandardOutput.ReadToEnd()
-        $null = $p.StandardError.ReadToEnd()
-        $p.WaitForExit(120000) | Out-Null
+        $err = $p.StandardError.ReadToEnd()
+        $p.WaitForExit(90000) | Out-Null
+
         if ($out) {
-            $count = @($out -split "`r?`n" | Where-Object { $_ -match '^https?://' }).Count
+            $urls = @($out -split "`r?`n" | Where-Object { $_ -match '^https?://' })
+            $count = $urls.Count
+        }
+
+        # Fallback: try without cookies if we got nothing
+        if ($count -eq 0) {
+            $argList2 = [System.Collections.Generic.List[string]]::new()
+            $argList2.Add("-g")
+            $argList2.Add($Url)
+            $psi2 = New-Object System.Diagnostics.ProcessStartInfo
+            $psi2.FileName = $exe
+            if ($useModule) {
+                $psi2.Arguments = "-m gallery_dl " + ($argList2 | ForEach-Object {
+                    if ($_ -match '\s') { "`"$_`"" } else { $_ }
+                }) -join " "
+            } else {
+                $psi2.Arguments = ($argList2 | ForEach-Object {
+                    if ($_ -match '\s') { "`"$_`"" } else { $_ }
+                }) -join " "
+            }
+            $psi2.RedirectStandardOutput = $true
+            $psi2.RedirectStandardError = $true
+            $psi2.UseShellExecute = $false
+            $psi2.CreateNoWindow = $true
+            $psi2.WorkingDirectory = $psi.WorkingDirectory
+            $p2 = [System.Diagnostics.Process]::Start($psi2)
+            $out2 = $p2.StandardOutput.ReadToEnd()
+            $null = $p2.StandardError.ReadToEnd()
+            $p2.WaitForExit(60000) | Out-Null
+            if ($out2) {
+                $urls2 = @($out2 -split "`r?`n" | Where-Object { $_ -match '^https?://' })
+                $count = $urls2.Count
+            }
+        }
+
+        # yt-dlp flat-playlist fallback for video sites (RedGifs, Pornhub, etc.)
+        if ($count -eq 0 -and (Get-Command yt-dlp -ErrorAction SilentlyContinue)) {
+            try {
+                $ytdlOut = & yt-dlp --flat-playlist --print "%(id)s" --no-warnings "$Url" 2>$null
+                if ($ytdlOut) {
+                    $count = @($ytdlOut -split "`r?`n" | Where-Object { $_.Trim() }).Count
+                }
+            } catch {}
         }
     } catch {}
     return $count
@@ -252,7 +386,23 @@ L "Finished LASTEXITCODE=`$LASTEXITCODE"
     }
 
     $lastLine = "Running..."
+    $wasCancelled = $false
     while (-not $p.HasExited) {
+        # Immediate cancel check (button or X) - Tag becomes $true
+        $isCancelled = $false
+        try { $isCancelled = [bool]$prog.Form.Tag } catch {}
+        if ($isCancelled) {
+            $wasCancelled = $true
+            try {
+                if (-not $p.HasExited) {
+                    # Kill entire process tree so gallery-dl / yt-dlp die right now
+                    & taskkill.exe /F /T /PID $p.Id 2>$null | Out-Null
+                    $p.WaitForExit(2000) | Out-Null
+                }
+            } catch {}
+            break
+        }
+
         $added = 0
         try {
             if (Test-Path $WatchFolder) {
@@ -277,7 +427,7 @@ L "Finished LASTEXITCODE=`$LASTEXITCODE"
         } catch {}
 
         Update-DownloadProgress $prog $StatusText $lastLine $pct
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 350
     }
 
     $combined = ""
@@ -294,16 +444,29 @@ L "Finished LASTEXITCODE=`$LASTEXITCODE"
 
     try { Remove-Item $tmp -Force -ErrorAction SilentlyContinue } catch {}
 
+    if ($wasCancelled) {
+        try {
+            if (-not $prog.Form.IsDisposed) {
+                Update-DownloadProgress $prog "CANCELLED" "Download stopped by user" 0
+                Start-Sleep -Milliseconds 500
+            }
+            $prog.Form.Close()
+        } catch {}
+        Write-Log "Download CANCELLED by user  newFiles=$newFiles"
+        return
+    }
+
+    # Normal finish
     if ($newFiles -gt 0 -or $p.ExitCode -eq 0) {
         $msg = if ($ExpectedTotal -gt 0) { "Downloaded $newFiles / $ExpectedTotal" } else { "New files: $newFiles" }
         Update-DownloadProgress $prog "Download finished" $msg 100
         Start-Sleep -Milliseconds 700
-        $prog.Form.Close()
+        try { $prog.Form.Close() } catch {}
         Write-Log "Download OK exit=$($p.ExitCode) newFiles=$newFiles expected=$ExpectedTotal"
     } else {
         Update-DownloadProgress $prog "Download may have failed" "Exit: $($p.ExitCode)  |  New files: $newFiles" 100
         Start-Sleep -Milliseconds 500
-        $prog.Form.Close()
+        try { $prog.Form.Close() } catch {}
         $snippet = if ($combined.Length -gt 800) { $combined.Substring(0, 800) + "..." } else { $combined }
         if ([string]::IsNullOrWhiteSpace($snippet)) { $snippet = "(no output captured)" }
         [System.Windows.Forms.MessageBox]::Show(
@@ -321,6 +484,7 @@ $isDarkTheme            = $false
 $startWithWindows       = $false
 $suppressGalleryWarning = $false
 $suppressFfmpegWarning  = $false
+$suppressDownloadConfirm = $false
 
 if (Test-Path $settingsFile) {
     foreach ($line in (Get-Content $settingsFile)) {
@@ -330,6 +494,7 @@ if (Test-Path $settingsFile) {
         if ($line -match "StartWithWindows=(True|False)")        { $startWithWindows       = [bool]::Parse($Matches[1]) }
         if ($line -match "SuppressGalleryWarning=(True|False)")  { $suppressGalleryWarning = [bool]::Parse($Matches[1]) }
         if ($line -match "SuppressFfmpegWarning=(True|False)")   { $suppressFfmpegWarning  = [bool]::Parse($Matches[1]) }
+        if ($line -match "SuppressDownloadConfirm=(True|False)") { $suppressDownloadConfirm = [bool]::Parse($Matches[1]) }
     }
 }
 
@@ -341,6 +506,7 @@ DarkTheme=$isDarkTheme
 StartWithWindows=$startWithWindows
 SuppressGalleryWarning=$suppressGalleryWarning
 SuppressFfmpegWarning=$suppressFfmpegWarning
+SuppressDownloadConfirm=$suppressDownloadConfirm
 "@ | Set-Content $settingsFile
 }
 
@@ -509,6 +675,80 @@ function Show-FfmpegWarning {
     return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
 }
 
+function Show-DownloadConfirm {
+    param(
+        [string]$UrlOrDesc = "",
+        [int]$Expected = 0
+    )
+    if ($suppressDownloadConfirm) { return $true }
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = "Confirm Download"
+    $dlg.Size = New-Object System.Drawing.Size(520, 280)
+    $dlg.StartPosition = "CenterParent"
+    $dlg.FormBorderStyle = "FixedDialog"
+    $dlg.MaximizeBox = $false
+    $dlg.MinimizeBox = $false
+    $dlg.TopMost = $true
+    $dlg.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+
+    $lbl = New-Object System.Windows.Forms.Label
+    $estText = if ($Expected -gt 0) {
+        "Page scan complete.`nEstimated videos/media items: $Expected"
+    } else {
+        "Page scan found 0 (or unknown).`nWill download whatever is available."
+    }
+    $shortUrl = if ($UrlOrDesc.Length -gt 70) { $UrlOrDesc.Substring(0, 67) + "..." } else { $UrlOrDesc }
+    $lbl.Text = "You are about to download:`n$shortUrl`n`n$estText`n`nDo you want to proceed?"
+    $lbl.Location = New-Object System.Drawing.Point(20, 18)
+    $lbl.Size = New-Object System.Drawing.Size(470, 120)
+    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $lbl.ForeColor = [System.Drawing.Color]::White
+    $dlg.Controls.Add($lbl)
+
+    $chk = New-Object System.Windows.Forms.CheckBox
+    $chk.Text = "DO NOT SHOW THIS AGAIN"
+    $chk.Location = New-Object System.Drawing.Point(20, 155)
+    $chk.AutoSize = $true
+    $chk.ForeColor = [System.Drawing.Color]::FromArgb(0, 220, 120)
+    $chk.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $dlg.Controls.Add($chk)
+
+    $btnYes = New-Object System.Windows.Forms.Button
+    $btnYes.Text = "YES - DOWNLOAD"
+    $btnYes.Size = New-Object System.Drawing.Size(160, 38)
+    $btnYes.Location = New-Object System.Drawing.Point(120, 195)
+    $btnYes.BackColor = [System.Drawing.Color]::FromArgb(0, 150, 90)
+    $btnYes.ForeColor = [System.Drawing.Color]::White
+    $btnYes.FlatStyle = "Flat"
+    $btnYes.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnYes.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+    $dlg.Controls.Add($btnYes)
+
+    $btnNo = New-Object System.Windows.Forms.Button
+    $btnNo.Text = "NO - CANCEL"
+    $btnNo.Size = New-Object System.Drawing.Size(140, 38)
+    $btnNo.Location = New-Object System.Drawing.Point(300, 195)
+    $btnNo.BackColor = [System.Drawing.Color]::FromArgb(180, 40, 40)
+    $btnNo.ForeColor = [System.Drawing.Color]::White
+    $btnNo.FlatStyle = "Flat"
+    $btnNo.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnNo.DialogResult = [System.Windows.Forms.DialogResult]::No
+    $dlg.Controls.Add($btnNo)
+
+    $dlg.AcceptButton = $btnYes
+    $dlg.CancelButton = $btnNo
+
+    $result = $dlg.ShowDialog()
+
+    if ($chk.Checked) {
+        $script:suppressDownloadConfirm = $true
+        Save-Settings
+    }
+
+    return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+}
+
 function Force-Delete($path) {
     if (-not (Test-Path -LiteralPath $path)) { return }
     try { [System.IO.File]::SetAttributes($path, 'Normal') } catch {}
@@ -527,8 +767,8 @@ function Show-ConvertDialog {
     }
 
     $dlg = New-Object System.Windows.Forms.Form
-    $dlg.Text = "Convert Videos to MP4"
-    $dlg.Size = New-Object System.Drawing.Size(520, 320)
+    $dlg.Text = "Convert Videos"
+    $dlg.Size = New-Object System.Drawing.Size(520, 380)
     $dlg.StartPosition = "CenterParent"
     $dlg.FormBorderStyle = "FixedDialog"
     $dlg.MaximizeBox = $false
@@ -565,14 +805,28 @@ function Show-ConvertDialog {
     $btnBrowse.Size = New-Object System.Drawing.Size(90, 28)
     $dlg.Controls.Add($btnBrowse)
 
+    $lblFormat = New-Object System.Windows.Forms.Label
+    $lblFormat.Text = "Convert to format:"
+    $lblFormat.Location = New-Object System.Drawing.Point(20, 130)
+    $lblFormat.AutoSize = $true
+    $dlg.Controls.Add($lblFormat)
+
+    $cmbFormat = New-Object System.Windows.Forms.ComboBox
+    $cmbFormat.Location = New-Object System.Drawing.Point(150, 127)
+    $cmbFormat.Size = New-Object System.Drawing.Size(150, 28)
+    $cmbFormat.DropDownStyle = "DropDownList"
+    $cmbFormat.Items.AddRange(@("MP4 (recommended)", "MKV", "WebM", "AVI", "MOV", "FLV", "M4V"))
+    $cmbFormat.SelectedIndex = 0
+    $dlg.Controls.Add($cmbFormat)
+
     $lblStatus = New-Object System.Windows.Forms.Label
     $lblStatus.Text = "Ready - pick one or many files, or a whole folder"
-    $lblStatus.Location = New-Object System.Drawing.Point(20, 135)
+    $lblStatus.Location = New-Object System.Drawing.Point(20, 170)
     $lblStatus.Size = New-Object System.Drawing.Size(460, 20)
     $dlg.Controls.Add($lblStatus)
 
     $progress = New-Object System.Windows.Forms.ProgressBar
-    $progress.Location = New-Object System.Drawing.Point(20, 165)
+    $progress.Location = New-Object System.Drawing.Point(20, 200)
     $progress.Size = New-Object System.Drawing.Size(460, 25)
     $progress.Minimum = 0
     $progress.Maximum = 100
@@ -581,7 +835,7 @@ function Show-ConvertDialog {
 
     $btnStart = New-Object System.Windows.Forms.Button
     $btnStart.Text = "Start Convert"
-    $btnStart.Location = New-Object System.Drawing.Point(250, 220)
+    $btnStart.Location = New-Object System.Drawing.Point(250, 280)
     $btnStart.Size = New-Object System.Drawing.Size(120, 35)
     $btnStart.BackColor = [System.Drawing.Color]::FromArgb(0,150,90)
     $btnStart.ForeColor = [System.Drawing.Color]::White
@@ -590,7 +844,7 @@ function Show-ConvertDialog {
 
     $btnClose = New-Object System.Windows.Forms.Button
     $btnClose.Text = "Close"
-    $btnClose.Location = New-Object System.Drawing.Point(380, 220)
+    $btnClose.Location = New-Object System.Drawing.Point(380, 280)
     $btnClose.Size = New-Object System.Drawing.Size(100, 35)
     $btnClose.FlatStyle = "Flat"
     $dlg.Controls.Add($btnClose)
@@ -601,7 +855,7 @@ function Show-ConvertDialog {
     $btnBrowse.Add_Click({
         if ($rbFile.Checked) {
             $ofd = New-Object System.Windows.Forms.OpenFileDialog
-            $ofd.Filter = "Video files|*.m4v;*.mkv;*.webm;*.avi;*.mov;*.wmv;*.flv|All files|*.*"
+            $ofd.Filter = "Video files|*.m4v;*.mkv;*.webm;*.avi;*.mov;*.wmv;*.flv;*.mp4|All files|*.*"
             $ofd.Title = "Select one or more video files (Ctrl+click / Shift+click)"
             $ofd.Multiselect = $true
             if ($ofd.ShowDialog() -eq "OK") {
@@ -630,26 +884,43 @@ function Show-ConvertDialog {
             return
         }
 
+        $formatMap = @{
+            "MP4 (recommended)" = ".mp4"
+            "MKV" = ".mkv"
+            "WebM" = ".webm"
+            "AVI" = ".avi"
+            "MOV" = ".mov"
+            "FLV" = ".flv"
+            "M4V" = ".m4v"
+        }
+        $selectedFormat = $cmbFormat.SelectedItem.ToString()
+        $targetExt = $formatMap[$selectedFormat]
+        if (-not $targetExt) { $targetExt = ".mp4" }
+
         $files = @()
         if ($script:isFolder) {
             $folder = $script:selectedPaths[0]
             $files = @(Get-ChildItem -Path $folder -Recurse -File -ErrorAction SilentlyContinue |
-                Where-Object { $_.Extension -match '^\.(m4v|mkv|webm|avi|mov|wmv|flv)$' })
+                Where-Object { $_.Extension -match '^\.(m4v|mkv|webm|avi|mov|wmv|flv|mp4)$' -and $_.Extension.ToLower() -ne $targetExt })
         } else {
             foreach ($p in $script:selectedPaths) {
                 if (Test-Path -LiteralPath $p) {
-                    $files += Get-Item -LiteralPath $p
+                    $item = Get-Item -LiteralPath $p
+                    if ($item.Extension.ToLower() -ne $targetExt) {
+                        $files += $item
+                    }
                 }
             }
         }
 
         if ($files.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("No convertible video files found.")
+            [System.Windows.Forms.MessageBox]::Show("No convertible video files found (or already in target format).")
             return
         }
 
         $btnStart.Enabled = $false
         $btnBrowse.Enabled = $false
+        $cmbFormat.Enabled = $false
         $progress.Value = 0
         $progress.Maximum = $files.Count
         $converted = 0
@@ -657,12 +928,12 @@ function Show-ConvertDialog {
 
         for ($i = 0; $i -lt $files.Count; $i++) {
             $f = $files[$i]
-            $lblStatus.Text = "Converting: $($f.Name)  ($($i+1)/$($files.Count))"
+            $lblStatus.Text = "Converting: $($f.Name) -> $targetExt  ($($i+1)/$($files.Count))"
             $progress.Value = $i
             [System.Windows.Forms.Application]::DoEvents()
 
             $sourcePath = $f.FullName
-            $out = [System.IO.Path]::ChangeExtension($sourcePath, ".mp4")
+            $out = [System.IO.Path]::ChangeExtension($sourcePath, $targetExt)
 
             if (Test-Path $out) {
                 $converted++
@@ -672,16 +943,33 @@ function Show-ConvertDialog {
 
             try {
                 $ff = if ($script:ffmpegPath) { $script:ffmpegPath } else { "ffmpeg" }
+                # Try stream copy first (fast, lossless when compatible)
                 $args = "-y -i `"$sourcePath`" -c copy `"$out`""
                 $p = Start-Process $ff -ArgumentList $args -Wait -NoNewWindow -PassThru
-                if ((Test-Path $out) -and ((Get-Item $out).Length -gt 0)) {
+                $ok = (Test-Path $out) -and ((Get-Item $out).Length -gt 0)
+
+                if (-not $ok) {
+                    # Fallback re-encode when copy fails (incompatible codecs/container)
+                    if (Test-Path $out) { Force-Delete $out }
+                    if ($targetExt -eq ".webm") {
+                        $args = "-y -i `"$sourcePath`" -c:v libvpx-vp9 -b:v 0 -crf 30 -c:a libopus `"$out`""
+                    } else {
+                        $args = "-y -i `"$sourcePath`" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k `"$out`""
+                    }
+                    $p = Start-Process $ff -ArgumentList $args -Wait -NoNewWindow -PassThru
+                    $ok = (Test-Path $out) -and ((Get-Item $out).Length -gt 0)
+                }
+
+                if ($ok) {
                     $converted++
                     Force-Delete $sourcePath
                 } else {
                     $failed++
+                    if (Test-Path $out) { Force-Delete $out }
                 }
             } catch {
                 $failed++
+                if (Test-Path $out) { Force-Delete $out }
             }
         }
 
@@ -689,8 +977,9 @@ function Show-ConvertDialog {
         $lblStatus.Text = "Done! Converted: $converted   Failed: $failed"
         $btnStart.Enabled = $true
         $btnBrowse.Enabled = $true
+        $cmbFormat.Enabled = $true
 
-        [System.Windows.Forms.MessageBox]::Show("Conversion finished.`n`nConverted: $converted`nFailed: $failed`nOriginals force-deleted.")
+        [System.Windows.Forms.MessageBox]::Show("Conversion finished.`n`nTarget format: $selectedFormat`nConverted: $converted`nFailed: $failed`nOriginals force-deleted.")
     })
 
     $btnClose.Add_Click({ $dlg.Close() })
@@ -945,7 +1234,7 @@ foreach ($site in $allSites) {
 }
 
 $lblVersion = New-Object System.Windows.Forms.Label
-$lblVersion.Text = "v.1.24"
+$lblVersion.Text = "v.1.26"
 $lblVersion.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $lblVersion.ForeColor = [System.Drawing.Color]::Black
 $lblVersion.BackColor = [System.Drawing.Color]::Transparent
@@ -1023,7 +1312,7 @@ $btnChangeFold.BackColor = [System.Drawing.Color]::FromArgb(40,40,40); $btnChang
 $panelDownload.Controls.Add($btnChangeFold)
 
 $btnConvert = New-Object System.Windows.Forms.Button
-$btnConvert.Text = "Convert Videos to MP4"; $btnConvert.Location = New-Object System.Drawing.Point(660,260)
+$btnConvert.Text = "Convert Videos"; $btnConvert.Location = New-Object System.Drawing.Point(660,260)
 $btnConvert.Size = New-Object System.Drawing.Size(180,40); $btnConvert.FlatStyle = "Flat"
 $btnConvert.BackColor = [System.Drawing.Color]::FromArgb(180,80,20); $btnConvert.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnConvert)
@@ -1039,6 +1328,13 @@ $btnInstallGallery.Text = "Install gallery-dl"; $btnInstallGallery.Location = Ne
 $btnInstallGallery.Size = New-Object System.Drawing.Size(160,40); $btnInstallGallery.FlatStyle = "Flat"
 $btnInstallGallery.BackColor = [System.Drawing.Color]::FromArgb(30,100,180); $btnInstallGallery.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnInstallGallery)
+
+$btnOnlyFans = New-Object System.Windows.Forms.Button
+$btnOnlyFans.Text = "OnlyFans Batch Download"; $btnOnlyFans.Location = New-Object System.Drawing.Point(380,320)
+$btnOnlyFans.Size = New-Object System.Drawing.Size(220,40); $btnOnlyFans.FlatStyle = "Flat"
+$btnOnlyFans.BackColor = [System.Drawing.Color]::FromArgb(200,50,120); $btnOnlyFans.ForeColor = [System.Drawing.Color]::White
+$btnOnlyFans.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$panelDownload.Controls.Add($btnOnlyFans)
 
 $lblTools = New-Object System.Windows.Forms.Label
 $lblTools.Text = "Tools, Sliders & Session Controls"
@@ -1220,20 +1516,29 @@ $btnOneUrl.Add_Click({
     $expected = Get-GalleryDlExpectedCount -Url $url -CookieBrowser $cookieBrowser
     if ($expected -le 0) { $expected = 0 }
 
-    $cookiesFile = Join-Path $configDir "cookies.txt"
+    if (-not (Show-DownloadConfirm -UrlOrDesc $url -Expected $expected)) { return }
+
+    $cookieFiles = Get-CookieFiles
+    $cookieFilesLit = if ($cookieFiles.Count -gt 0) {
+        ($cookieFiles | ForEach-Object { "'$_'" }) -join ", "
+    } else { "" }
     $cmd = @"
 L "URL: $url"
 L "Dest: $downloadPath"
-L "Cookies file: $cookiesFile"
+L "Cookie files: $($cookieFiles -join '; ')"
 L "Expected items: $expected"
 Set-Location -LiteralPath '$downloadPath'
 L "cwd now: `$(Get-Location)"
+`$cookieArgs = @()
+foreach (`$cf in @($cookieFilesLit)) {
+    if (`$cf) { `$cookieArgs += '--cookies'; `$cookieArgs += `$cf }
+}
 if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-    L 'Running: gallery-dl -D . --cookies "$cookiesFile" "$url"'
-    & gallery-dl -D . --cookies "$cookiesFile" "$url"
+    L "Running: gallery-dl -D . + cookies + $url"
+    & gallery-dl -D . @cookieArgs "$url"
 } else {
-    L 'Running: python -m gallery_dl -D . --cookies "$cookiesFile" "$url"'
-    & python -m gallery_dl -D . --cookies "$cookiesFile" "$url"
+    L "Running: python -m gallery_dl -D . + cookies + $url"
+    & python -m gallery_dl -D . @cookieArgs "$url"
 }
 if (`$LASTEXITCODE -ne 0) {
     L 'Retry without cookies...'
@@ -1252,7 +1557,7 @@ L "Done exit=`$LASTEXITCODE"
 
     $status = if ($expected -gt 0) { "Downloading 0 / $expected" } else { "Downloading..." }
     Start-HiddenDownload -Command $cmd -StatusText $status -WatchFolder $downloadPath -ExpectedTotal $expected
-    Write-Log "Single URL download: $url (cookies=$cookieBrowser expected=$expected)"
+    Write-Log "Single URL download: $url (cookies=$($cookieFiles.Count) files expected=$expected)"
 })
 
 $btnQueue.Add_Click({
@@ -1268,23 +1573,44 @@ $btnQueue.Add_Click({
     Show-CookiesSetupPrompt
 
     $cookieBrowser = Get-CookieBrowserName
+    $cookieFiles = Get-CookieFiles
+    $cookieFilesLit = if ($cookieFiles.Count -gt 0) {
+        ($cookieFiles | ForEach-Object { "'$_'" }) -join ", "
+    } else { "" }
     $total = $urls.Count
+
+    # Pre-scan estimates so user sees total before committing
+    $expectedList = @()
+    $totalExpected = 0
+    foreach ($u in $urls) {
+        $exp = Get-GalleryDlExpectedCount -Url $u -CookieBrowser $cookieBrowser
+        if ($exp -lt 0) { $exp = 0 }
+        $expectedList += $exp
+        $totalExpected += $exp
+    }
+
+    $desc = "$total URL(s) in queue"
+    if (-not (Show-DownloadConfirm -UrlOrDesc $desc -Expected $totalExpected)) { return }
+
     $n = 0
     foreach ($u in $urls) {
         $n++
-        $expected = Get-GalleryDlExpectedCount -Url $u -CookieBrowser $cookieBrowser
-        $cookiesFile = Join-Path $configDir "cookies.txt"
+        $expected = $expectedList[$n-1]
         $cmd = @"
 L "QUEUE $n / $total"
 L "URL: $u"
-L "Cookies file: $cookiesFile"
+L "Cookie files: $($cookieFiles -join '; ')"
 Set-Location -LiteralPath '$downloadPath'
 L "cwd now: `$(Get-Location)"
+`$cookieArgs = @()
+foreach (`$cf in @($cookieFilesLit)) {
+    if (`$cf) { `$cookieArgs += '--cookies'; `$cookieArgs += `$cf }
+}
 if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-    L 'Running: gallery-dl -D . --cookies "$cookiesFile" "$u"'
-    & gallery-dl -D . --cookies "$cookiesFile" "$u"
+    L "Running: gallery-dl -D . + cookies + $u"
+    & gallery-dl -D . @cookieArgs "$u"
 } else {
-    & python -m gallery_dl -D . --cookies "$cookiesFile" "$u"
+    & python -m gallery_dl -D . @cookieArgs "$u"
 }
 if (`$LASTEXITCODE -ne 0) {
     if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
@@ -1297,9 +1623,74 @@ L "Item done exit=`$LASTEXITCODE"
 "@
         $status = if ($expected -gt 0) { "Queue $n/$total (0 / $expected)" } else { "Queue $n of $total" }
         Start-HiddenDownload -Command $cmd -StatusText $status -WatchFolder $downloadPath -ExpectedTotal $expected
-        Write-Log "Queue download $n/$total : $u expected=$expected"
+        Write-Log "Queue download $n/$total : $u cookies=$($cookieFiles.Count) expected=$expected"
     }
     [System.Windows.Forms.MessageBox]::Show("Queue finished. Processed $total link(s).")
+})
+
+function Test-OFScraper {
+    try { $null = Get-Command ofscraper -ErrorAction Stop; return $true } catch {}
+    try { $out = & python -m ofscraper --help 2>$null; if ($LASTEXITCODE -eq 0 -or $out) { return $true } } catch {}
+    try { $out = & py -m ofscraper --help 2>$null; if ($LASTEXITCODE -eq 0 -or $out) { return $true } } catch {}
+    return $false
+}
+
+$btnOnlyFans.Add_Click({
+    if (-not (Test-OFScraper)) {
+        $r = [System.Windows.Forms.MessageBox]::Show(
+            "OF-Scraper is not installed.`n`nInstall it now? (pip install ofscraper)`n`nAfter install you must also set up OF-Scraper auth (run 'ofscraper' once and follow its login steps).",
+            "OF-Scraper Required",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo
+        )
+        if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
+            Start-Process powershell -ArgumentList "-NoExit","-Command","python -m pip install -U ofscraper; Write-Host ''; Write-Host 'Done. Now run ofscraper once to set up auth, then close this window.'; pause"
+        }
+        return
+    }
+
+    $input = [Microsoft.VisualBasic.Interaction]::InputBox(
+        "Paste OnlyFans usernames (one per line).`n`nExamples:`nusername`ncreator1`ncreator2`n`nOF-Scraper will download timeline + archived + pinned + purchased for each.`nYou must already be subscribed and have OF-Scraper auth set up.",
+        "OnlyFans Batch (OF-Scraper)",
+        ""
+    )
+    if ([string]::IsNullOrWhiteSpace($input)) { return }
+
+    $usernames = @()
+    foreach ($line in ($input -split "`r?`n")) {
+        $t = $line.Trim() -replace '^@','' -replace '^https?://(www\.)?onlyfans\.com/','' -replace '/.*$',''
+        if ($t) { $usernames += $t }
+    }
+    $usernames = $usernames | Select-Object -Unique
+    if ($usernames.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("No valid usernames found.")
+        return
+    }
+
+    $ofDesc = "OnlyFans profiles: $($usernames -join ', ')"
+    if (-not (Show-DownloadConfirm -UrlOrDesc $ofDesc -Expected 0)) { return }
+
+    $ofDir = Join-Path $downloadPath "OnlyFans"
+    if (-not (Test-Path $ofDir)) { New-Item -ItemType Directory -Path $ofDir -Force | Out-Null }
+
+    $userArgs = ($usernames | ForEach-Object { "`"$_`"" }) -join " "
+    $cmd = @"
+L "OF-Scraper batch for: $($usernames -join ', ')"
+L "Download folder: $ofDir"
+Set-Location -LiteralPath '$ofDir'
+L "cwd now: `$(Get-Location)"
+if (Get-Command ofscraper -ErrorAction SilentlyContinue) {
+    L "Running: ofscraper --username $userArgs --posts all --action download"
+    & ofscraper --username $userArgs --posts all --action download
+} else {
+    L "Running: python -m ofscraper --username $userArgs --posts all --action download"
+    & python -m ofscraper --username $userArgs --posts all --action download
+}
+L "OF-Scraper finished exit=`$LASTEXITCODE"
+"@
+
+    Start-HiddenDownload -Command $cmd -StatusText "OF-Scraper downloading $($usernames.Count) profile(s)..." -WatchFolder $ofDir -ExpectedTotal 0
+    Write-Log "OF-Scraper batch: $($usernames -join ', ')"
+    [System.Windows.Forms.MessageBox]::Show("OF-Scraper job finished.`n`nProfiles: $($usernames -join ', ')`n`nCheck folder:`n$ofDir`n`nIf empty: run 'ofscraper' in a terminal first to finish auth setup.")
 })
 
 $btnOpenFold.Add_Click({ Start-Process $downloadPath })
@@ -1400,6 +1791,7 @@ $btnDebugger.Add_Click({
     $lines.Add("startWithWindows=$startWithWindows")
     $lines.Add("suppressGalleryWarning=$suppressGalleryWarning")
     $lines.Add("suppressFfmpegWarning=$suppressFfmpegWarning")
+    $lines.Add("suppressDownloadConfirm=$suppressDownloadConfirm")
     $lines.Add("preferredBrowser=$preferredBrowser")
     $lines.Add("")
     $lines.Add("--- Tool Detection ---")
@@ -1605,16 +1997,18 @@ function Show-Panel($p) {
 }
 
 function Show-CookiesSetupPrompt {
-    $cookiesFile = Join-Path $configDir "cookies.txt"
-    if (Test-Path $cookiesFile) { return }
+    $existing = Get-CookieFiles
+    if ($existing.Count -gt 0) { return }
 
     $msg = @"
-cookies.txt is not set up.
+No cookies files found.
 
-Without it you will only be able to download from public sites.
-Login-required sites (Luscious members, many galleries, etc.) will fail.
+Supported names: cookies.txt , cookies1.txt , cookies2.txt ... up to cookies1000.txt
 
-Do you want to set up cookies.txt right now?
+Without any of them you will only be able to download from public sites.
+Login-required sites (OnlyFans, Luscious members, many galleries, etc.) will fail.
+
+Do you want to set up cookies now?
 "@
     $r = [System.Windows.Forms.MessageBox]::Show(
         $msg,
@@ -1630,8 +2024,18 @@ Do you want to set up cookies.txt right now?
     # Create and open instructions notepad
     $instrPath = Join-Path $configDir "HOW_TO_SETUP_COOKIES.txt"
     $instructions = @"
-HOW TO SET UP cookies.txt FOR UltimateGoonerTool
-================================================
+HOW TO SET UP COOKIE FILES FOR UltimateGoonerTool
+=================================================
+
+You can use MULTIPLE cookie files at once.
+Supported filenames in this folder:
+  cookies.txt
+  cookies1.txt
+  cookies2.txt
+  ...
+  cookies1000.txt
+
+All matching files are loaded together automatically.
 
 1. Install the Cookie Exporter Chrome extension:
    https://chromewebstore.google.com/detail/cookie-exporter/fhnmmidekmgocpjdceeffppcodigillk?hl=en
@@ -1647,12 +2051,18 @@ HOW TO SET UP cookies.txt FOR UltimateGoonerTool
 6. Move or save the downloaded file into this exact folder:
    $configDir
 
-7. Rename the file to exactly: cookies.txt
-   (must be named cookies.txt - no extra numbers or extensions)
+7. Rename the file to one of:
+   cookies.txt
+   or cookies1.txt
+   or cookies2.txt
+   ... up to cookies1000.txt
 
-8. Close this UltimateGoonerTool completely and reopen it.
+8. You can repeat for other sites / accounts and use different numbers (cookies3.txt etc).
+
+9. Close this UltimateGoonerTool completely and reopen it.
 
 After that, downloads from login-required sites should work.
+All cookie files are used together.
 
 You can delete this HOW_TO_SETUP_COOKIES.txt file once you are done.
 "@
@@ -1660,7 +2070,7 @@ You can delete this HOW_TO_SETUP_COOKIES.txt file once you are done.
         Set-Content -Path $instrPath -Value $instructions -Encoding UTF8
         Start-Process notepad.exe $instrPath
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("Could not create instructions file.`nJust put cookies.txt in:`n$configDir")
+        [System.Windows.Forms.MessageBox]::Show("Could not create instructions file.`nJust put cookies.txt (or cookies1.txt etc) in:`n$configDir")
     }
 }
 
@@ -1681,6 +2091,9 @@ function Show-AppConsole {
     Write-Host "Download folder: $downloadPath"
     Write-Host "Config folder:   $configDir"
     Write-Host "Cookie browser:  $(Get-CookieBrowserName)"
+    $cfs = Get-CookieFiles
+    Write-Host "Cookie files:    $($cfs.Count) found"
+    if ($cfs.Count -gt 0) { $cfs | ForEach-Object { Write-Host "                 $_" } }
     Write-Host "yt-dlp:          $(Test-Ytdlp)"
     Write-Host "gallery-dl:      $(Test-GalleryDL)"
     Write-Host "ffmpeg:          $(Test-FFmpeg)  path=$script:ffmpegPath"
@@ -1696,9 +2109,11 @@ Write-Host "Current: `$(Get-Location)"
 Write-Host ''
 Write-Host 'Useful commands:'
 Write-Host '  yt-dlp -f best -o "%(title)s.%(ext)s" "URL"'
-Write-Host '  gallery-dl -D . --cookies (Documents\ULTIMATE GOONER TOOL v5\cookies.txt) "URL"'
+Write-Host '  gallery-dl -D . --cookies cookies.txt --cookies cookies1.txt "URL"'
 Write-Host '  gallery-dl -D . "URL"'
 Write-Host '  Get-Command yt-dlp, gallery-dl, ffmpeg'
+Write-Host ''
+Write-Host 'Cookie files supported: cookies.txt + cookies1.txt ... cookies1000.txt'
 Write-Host ''
 "@
     $tmpHelp = Join-Path $env:TEMP "ugt_console_help.ps1"
