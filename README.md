@@ -1,22 +1,9 @@
-UltimateGoonerTool v.1.24
-What’s new in this version:
-
-Cleaned the site list — only real unique working sites remain (no more fake/duplicate Pornhub links)
-Full Goon Session now lets you choose exactly how many random sites to open
-Sites are always unique (never opens the same site twice in one session)
-Custom browser support — Choose Chrome, Firefox, Edge, Brave, or any custom path
-Version number v.1.24 displayed in the bottom right
-
-Features included:
-
-yt-dlp as main downloader + gallery-dl as fallback
-Favorites system
-Dark / Light theme toggle
-Intensity presets (Light / Normal / Heavy)
-Start with Windows option
-Window size & position memory
-Update checker
-All original tools (Force Goon To, Daily Challenge, Edge Timer, Spin the Wheel, Multi-Site Search, etc.)
+Critical URL injection fixed with Test-SafeUrl + proper escaping so a malicious paste cannot break out of the generated PowerShell and run arbitrary commands.
+Converter no longer force-deletes originals unless you explicitly check the new “Delete originals” box (off by default).
+Duplicate cleaner now uses real SHA-256 content hashes instead of filename similarity — different edits/qualities stay safe.
+--cookies-from-browser completely removed; only your exported cookies*.txt files are used.
+Privacy Wipe can now also wipe the tool’s own logs, last session, favorites, and cookie files.
+Close-All-Browsers now requires confirmation before force-killing process trees.
 
 ---
 
