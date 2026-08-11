@@ -1,6 +1,12 @@
 # ============================================================
-# UltimateGoonerTool V3 - Final Portable Edition
-# Version: v.1.26 (Console Hidden)
+# UltimateGoonerTool V3 - Final Portable Edition (Security Hardened)
+# Version: v.1.27-sec
+# Changes from 1.26:
+#  - Critical: URL injection prevention (Test-SafeUrl + proper escaping)
+#  - Converter no longer force-deletes originals by default
+#  - Duplicate cleaner now uses SHA-256 content hashes
+#  - --cookies-from-browser disabled by default (exported files only)
+#  - Privacy wipe can optionally clear tool logs/cookies
 # ============================================================
 
 Add-Type -Name Window -Namespace Console -MemberDefinition '
@@ -110,6 +116,37 @@ function Get-CookieFiles {
         if (Test-Path -LiteralPath $f) { $list.Add($f) }
     }
     return $list.ToArray()
+}
+
+# ---------- Security helpers (v1.27-sec) ----------
+function Test-SafeUrl {
+    param([string]$Url)
+    if ([string]::IsNullOrWhiteSpace($Url)) { return $false }
+    try {
+        $uri = [System.Uri]$Url
+        if ($uri.Scheme -notin @('http', 'https')) { return $false }
+        # Block characters that can break out of double-quoted strings or introduce command separators
+        if ($Url -match '[`"$;|&<>]') { return $false }
+        # Basic length sanity
+        if ($Url.Length -gt 2048) { return $false }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Escape-ForDoubleQuotedPs {
+    param([string]$Value)
+    if ($null -eq $Value) { return "" }
+    # Escape for embedding inside a double-quoted PowerShell string that will later be written to a .ps1
+    return ($Value -replace '`', '``' -replace '\$', '`$' -replace '"', '`"')
+}
+
+function Test-SafeUsername {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    # OnlyFans-style usernames: alphanumeric, underscore, hyphen, period
+    return ($Name -match '^[a-zA-Z0-9._-]{1,64}$')
 }
 
 function Write-Log($m) { Add-Content $logFile "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $m" }
@@ -222,15 +259,14 @@ function Get-GalleryDlExpectedCount {
         $argList = [System.Collections.Generic.List[string]]::new()
         $argList.Add("-g")
 
+        # Security: only use explicitly exported cookie files. Never pull live browser profile cookies.
         if ($cookieFiles.Count -gt 0) {
             foreach ($cf in $cookieFiles) {
                 $argList.Add("--cookies")
                 $argList.Add($cf)
             }
-        } else {
-            $argList.Add("--cookies-from-browser")
-            $argList.Add($CookieBrowser)
         }
+        # (intentionally no --cookies-from-browser fallback)
         $argList.Add($Url)
 
         $exe = $null
@@ -768,7 +804,7 @@ function Show-ConvertDialog {
 
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = "Convert Videos"
-    $dlg.Size = New-Object System.Drawing.Size(520, 380)
+    $dlg.Size = New-Object System.Drawing.Size(520, 420)
     $dlg.StartPosition = "CenterParent"
     $dlg.FormBorderStyle = "FixedDialog"
     $dlg.MaximizeBox = $false
@@ -833,9 +869,17 @@ function Show-ConvertDialog {
     $progress.Value = 0
     $dlg.Controls.Add($progress)
 
+    $chkDeleteOrig = New-Object System.Windows.Forms.CheckBox
+    $chkDeleteOrig.Text = "Delete originals after successful convert (IRREVERSIBLE - off by default)"
+    $chkDeleteOrig.Location = New-Object System.Drawing.Point(20, 235)
+    $chkDeleteOrig.Size = New-Object System.Drawing.Size(460, 25)
+    $chkDeleteOrig.Checked = $false
+    $chkDeleteOrig.ForeColor = [System.Drawing.Color]::FromArgb(180, 40, 40)
+    $dlg.Controls.Add($chkDeleteOrig)
+
     $btnStart = New-Object System.Windows.Forms.Button
     $btnStart.Text = "Start Convert"
-    $btnStart.Location = New-Object System.Drawing.Point(250, 280)
+    $btnStart.Location = New-Object System.Drawing.Point(250, 320)
     $btnStart.Size = New-Object System.Drawing.Size(120, 35)
     $btnStart.BackColor = [System.Drawing.Color]::FromArgb(0,150,90)
     $btnStart.ForeColor = [System.Drawing.Color]::White
@@ -844,7 +888,7 @@ function Show-ConvertDialog {
 
     $btnClose = New-Object System.Windows.Forms.Button
     $btnClose.Text = "Close"
-    $btnClose.Location = New-Object System.Drawing.Point(380, 280)
+    $btnClose.Location = New-Object System.Drawing.Point(380, 320)
     $btnClose.Size = New-Object System.Drawing.Size(100, 35)
     $btnClose.FlatStyle = "Flat"
     $dlg.Controls.Add($btnClose)
@@ -921,10 +965,13 @@ function Show-ConvertDialog {
         $btnStart.Enabled = $false
         $btnBrowse.Enabled = $false
         $cmbFormat.Enabled = $false
+        $chkDeleteOrig.Enabled = $false
         $progress.Value = 0
         $progress.Maximum = $files.Count
         $converted = 0
         $failed = 0
+        $deleted = 0
+        $doDelete = $chkDeleteOrig.Checked
 
         for ($i = 0; $i -lt $files.Count; $i++) {
             $f = $files[$i]
@@ -935,9 +982,9 @@ function Show-ConvertDialog {
             $sourcePath = $f.FullName
             $out = [System.IO.Path]::ChangeExtension($sourcePath, $targetExt)
 
+            # If target already exists, skip conversion and do NOT delete source
             if (Test-Path $out) {
                 $converted++
-                Force-Delete $sourcePath
                 continue
             }
 
@@ -962,7 +1009,10 @@ function Show-ConvertDialog {
 
                 if ($ok) {
                     $converted++
-                    Force-Delete $sourcePath
+                    if ($doDelete) {
+                        Force-Delete $sourcePath
+                        $deleted++
+                    }
                 } else {
                     $failed++
                     if (Test-Path $out) { Force-Delete $out }
@@ -974,12 +1024,14 @@ function Show-ConvertDialog {
         }
 
         $progress.Value = $files.Count
-        $lblStatus.Text = "Done! Converted: $converted   Failed: $failed"
+        $lblStatus.Text = "Done! Converted: $converted   Failed: $failed   Deleted originals: $deleted"
         $btnStart.Enabled = $true
         $btnBrowse.Enabled = $true
         $cmbFormat.Enabled = $true
+        $chkDeleteOrig.Enabled = $true
 
-        [System.Windows.Forms.MessageBox]::Show("Conversion finished.`n`nTarget format: $selectedFormat`nConverted: $converted`nFailed: $failed`nOriginals force-deleted.")
+        $delMsg = if ($doDelete) { "`nOriginals deleted: $deleted" } else { "`nOriginals kept (delete option was off)" }
+        [System.Windows.Forms.MessageBox]::Show("Conversion finished.`n`nTarget format: $selectedFormat`nConverted: $converted`nFailed: $failed$delMsg")
     })
 
     $btnClose.Add_Click({ $dlg.Close() })
@@ -1234,7 +1286,7 @@ foreach ($site in $allSites) {
 }
 
 $lblVersion = New-Object System.Windows.Forms.Label
-$lblVersion.Text = "v.1.26"
+$lblVersion.Text = "v.1.27-sec"
 $lblVersion.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $lblVersion.ForeColor = [System.Drawing.Color]::Black
 $lblVersion.BackColor = [System.Drawing.Color]::Transparent
@@ -1505,6 +1557,11 @@ $btnOneUrl.Add_Click({
     $url = [Microsoft.VisualBasic.Interaction]::InputBox("Paste any video or gallery link:","Download")
     if ([string]::IsNullOrWhiteSpace($url)) { return }
 
+    if (-not (Test-SafeUrl $url)) {
+        [System.Windows.Forms.MessageBox]::Show("Invalid or potentially dangerous URL rejected.`nOnly plain http/https links are allowed.")
+        return
+    }
+
     if (-not (Test-GalleryDL)) {
         if (-not (Show-GalleryWarning)) { return }
     }
@@ -1522,8 +1579,12 @@ $btnOneUrl.Add_Click({
     $cookieFilesLit = if ($cookieFiles.Count -gt 0) {
         ($cookieFiles | ForEach-Object { "'$_'" }) -join ", "
     } else { "" }
+
+    # Critical: escape so the URL cannot break out of the generated PowerShell string
+    $escUrl = Escape-ForDoubleQuotedPs $url
+
     $cmd = @"
-L "URL: $url"
+L "URL: $escUrl"
 L "Dest: $downloadPath"
 L "Cookie files: $($cookieFiles -join '; ')"
 L "Expected items: $expected"
@@ -1534,23 +1595,23 @@ foreach (`$cf in @($cookieFilesLit)) {
     if (`$cf) { `$cookieArgs += '--cookies'; `$cookieArgs += `$cf }
 }
 if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-    L "Running: gallery-dl -D . + cookies + $url"
-    & gallery-dl -D . @cookieArgs "$url"
+    L "Running: gallery-dl -D . + cookies"
+    & gallery-dl -D . @cookieArgs "$escUrl"
 } else {
-    L "Running: python -m gallery_dl -D . + cookies + $url"
-    & python -m gallery_dl -D . @cookieArgs "$url"
+    L "Running: python -m gallery_dl -D . + cookies"
+    & python -m gallery_dl -D . @cookieArgs "$escUrl"
 }
 if (`$LASTEXITCODE -ne 0) {
     L 'Retry without cookies...'
     if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-        & gallery-dl -D . "$url"
+        & gallery-dl -D . "$escUrl"
     } else {
-        & python -m gallery_dl -D . "$url"
+        & python -m gallery_dl -D . "$escUrl"
     }
 }
 if (`$LASTEXITCODE -ne 0 -and (Get-Command yt-dlp -ErrorAction SilentlyContinue)) {
     L 'Fallback yt-dlp...'
-    & yt-dlp -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best" -o "%(title)s.%(ext)s" "$url"
+    & yt-dlp -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best" -o "%(title)s.%(ext)s" "$escUrl"
 }
 L "Done exit=`$LASTEXITCODE"
 "@
@@ -1563,7 +1624,19 @@ L "Done exit=`$LASTEXITCODE"
 $btnQueue.Add_Click({
     $input = [Microsoft.VisualBasic.Interaction]::InputBox("Paste multiple links (one per line):","Queue")
     if ([string]::IsNullOrWhiteSpace($input)) { return }
-    $urls = @($input -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $rawUrls = @($input -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($rawUrls.Count -eq 0) { return }
+
+    # Reject any unsafe URL before any processing
+    $urls = @()
+    foreach ($candidate in $rawUrls) {
+        if (Test-SafeUrl $candidate) {
+            $urls += $candidate
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Rejected unsafe URL:`n$candidate`n`nOnly plain http/https links allowed.")
+            return
+        }
+    }
     if ($urls.Count -eq 0) { return }
 
     if (-not (Test-GalleryDL)) {
@@ -1596,9 +1669,10 @@ $btnQueue.Add_Click({
     foreach ($u in $urls) {
         $n++
         $expected = $expectedList[$n-1]
+        $escUrl = Escape-ForDoubleQuotedPs $u
         $cmd = @"
 L "QUEUE $n / $total"
-L "URL: $u"
+L "URL: $escUrl"
 L "Cookie files: $($cookieFiles -join '; ')"
 Set-Location -LiteralPath '$downloadPath'
 L "cwd now: `$(Get-Location)"
@@ -1607,16 +1681,16 @@ foreach (`$cf in @($cookieFilesLit)) {
     if (`$cf) { `$cookieArgs += '--cookies'; `$cookieArgs += `$cf }
 }
 if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-    L "Running: gallery-dl -D . + cookies + $u"
-    & gallery-dl -D . @cookieArgs "$u"
+    L "Running: gallery-dl -D . + cookies"
+    & gallery-dl -D . @cookieArgs "$escUrl"
 } else {
-    & python -m gallery_dl -D . @cookieArgs "$u"
+    & python -m gallery_dl -D . @cookieArgs "$escUrl"
 }
 if (`$LASTEXITCODE -ne 0) {
     if (Get-Command gallery-dl -ErrorAction SilentlyContinue) {
-        & gallery-dl -D . "$u"
+        & gallery-dl -D . "$escUrl"
     } else {
-        & python -m gallery_dl -D . "$u"
+        & python -m gallery_dl -D . "$escUrl"
     }
 }
 L "Item done exit=`$LASTEXITCODE"
@@ -1658,7 +1732,12 @@ $btnOnlyFans.Add_Click({
     $usernames = @()
     foreach ($line in ($input -split "`r?`n")) {
         $t = $line.Trim() -replace '^@','' -replace '^https?://(www\.)?onlyfans\.com/','' -replace '/.*$',''
-        if ($t) { $usernames += $t }
+        if ($t -and (Test-SafeUsername $t)) {
+            $usernames += $t
+        } elseif ($t) {
+            [System.Windows.Forms.MessageBox]::Show("Rejected unsafe username: $t`nOnly letters, numbers, _ - . allowed.")
+            return
+        }
     }
     $usernames = $usernames | Select-Object -Unique
     if ($usernames.Count -eq 0) {
@@ -1672,6 +1751,7 @@ $btnOnlyFans.Add_Click({
     $ofDir = Join-Path $downloadPath "OnlyFans"
     if (-not (Test-Path $ofDir)) { New-Item -ItemType Directory -Path $ofDir -Force | Out-Null }
 
+    # Build safe argument list (already validated by Test-SafeUsername)
     $userArgs = ($usernames | ForEach-Object { "`"$_`"" }) -join " "
     $cmd = @"
 L "OF-Scraper batch for: $($usernames -join ', ')"
@@ -1679,10 +1759,10 @@ L "Download folder: $ofDir"
 Set-Location -LiteralPath '$ofDir'
 L "cwd now: `$(Get-Location)"
 if (Get-Command ofscraper -ErrorAction SilentlyContinue) {
-    L "Running: ofscraper --username $userArgs --posts all --action download"
+    L "Running: ofscraper --username ... --posts all --action download"
     & ofscraper --username $userArgs --posts all --action download
 } else {
-    L "Running: python -m ofscraper --username $userArgs --posts all --action download"
+    L "Running: python -m ofscraper --username ... --posts all --action download"
     & python -m ofscraper --username $userArgs --posts all --action download
 }
 L "OF-Scraper finished exit=`$LASTEXITCODE"
@@ -1914,27 +1994,54 @@ $btnPerformer.Add_Click({
 })
 
 $btnDupes.Add_Click({
-    if ([System.Windows.Forms.MessageBox]::Show("Permanently delete duplicates?","Warning","YesNo") -ne "Yes") { return }
-    $fbd = New-Object System.Windows.Forms.FolderBrowserDialog; $fbd.SelectedPath = $downloadPath
-    if ($fbd.ShowDialog() -eq "OK") {
-        $files = Get-ChildItem $fbd.SelectedPath -File -EA SilentlyContinue
-        $norm = @{}; $del = @()
-        foreach ($f in $files) {
-            $clean = if ($f.BaseName -match '^(.*) \(\d+\)$') { $Matches[1] } else { $f.BaseName }
-            $key = "$clean$($f.Extension)".ToLower()
-            if (-not $norm.ContainsKey($key)) { $norm[$key] = @() }
-            $norm[$key] += $f
-        }
-        foreach ($g in $norm.Values) {
-            if ($g.Count -gt 1) {
-                $orig = $g | ? { $_.BaseName -notmatch ' \(\d+\)$' } | Select -First 1
-                if (-not $orig) { $orig = $g[0] }
-                $del += $g | ? { $_.FullName -ne $orig.FullName }
-            }
-        }
-        $cnt = 0; foreach ($d in $del) { try { Remove-Item $d.FullName -Force; $cnt++ } catch {} }
-        [System.Windows.Forms.MessageBox]::Show("Deleted $cnt duplicates")
+    $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
+    $fbd.Description = "Select folder to scan for content-identical duplicates (SHA-256)"
+    $fbd.SelectedPath = $downloadPath
+    if ($fbd.ShowDialog() -ne "OK") { return }
+
+    $files = @(Get-ChildItem $fbd.SelectedPath -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Length -gt 0 })
+    if ($files.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("No files found.")
+        return
     }
+
+    $hashGroups = @{}
+    $i = 0
+    foreach ($f in $files) {
+        $i++
+        try {
+            $h = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+            if (-not $hashGroups.ContainsKey($h)) { $hashGroups[$h] = [System.Collections.Generic.List[object]]::new() }
+            $hashGroups[$h].Add($f)
+        } catch {}
+    }
+
+    $toDelete = @()
+    foreach ($g in $hashGroups.Values) {
+        if ($g.Count -gt 1) {
+            # Keep the oldest (or first) file, mark the rest for deletion
+            $keep = $g | Sort-Object LastWriteTime | Select-Object -First 1
+            $toDelete += $g | Where-Object { $_.FullName -ne $keep.FullName }
+        }
+    }
+
+    if ($toDelete.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("No content-identical duplicates found.")
+        return
+    }
+
+    $msg = "Found $($toDelete.Count) content-identical duplicate file(s) (same SHA-256).`n`nThese will be permanently deleted.`nDifferent edits / different quality files with similar names are kept.`n`nProceed?"
+    if ([System.Windows.Forms.MessageBox]::Show($msg, "Confirm Duplicate Deletion", "YesNo") -ne "Yes") { return }
+
+    $cnt = 0
+    foreach ($d in $toDelete) {
+        try {
+            Remove-Item -LiteralPath $d.FullName -Force -ErrorAction Stop
+            $cnt++
+        } catch {}
+    }
+    [System.Windows.Forms.MessageBox]::Show("Deleted $cnt true content duplicates.")
 })
 
 $btnLog.Add_Click({
@@ -1955,8 +2062,15 @@ $btnLast.Add_Click({
 })
 
 $btnCloseAll.Add_Click({
+    $r = [System.Windows.Forms.MessageBox]::Show(
+        "This will FORCE-KILL all Chrome, Edge, Firefox, Brave, Opera and Vivaldi processes (entire trees).`n`nUnsaved work, downloads, and other tabs will be lost.`n`nContinue?",
+        "Close All Browsers",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+    if ($r -ne [System.Windows.Forms.DialogResult]::Yes) { return }
     "chrome","msedge","firefox","brave","opera","opera_gx","vivaldi" | % { taskkill /F /IM "$_.exe" /T 2>$null | Out-Null }
-    [System.Windows.Forms.MessageBox]::Show("All browsers closed")
+    [System.Windows.Forms.MessageBox]::Show("All listed browser processes killed.")
 })
 
 $btnBg.Add_Click({
@@ -2134,26 +2248,51 @@ $btnConsole.Add_Click({ Show-AppConsole })
 
 $btnSidePrivacy.Add_Click({
     $msg = @"
-Privacy Wipe will:
+Privacy Wipe options:
 
-- Clear the Windows clipboard
-- Delete all items from Windows Recent files
+1. Clear Windows clipboard + Recent files list
+2. ALSO clear this tool's own logs, last session, favorites, debug dump, and cookie files (downloads and settings are kept)
 
-This can freeze the app for an extended time if many recent items exist.
+This can freeze the app briefly if many recent items exist.
 
-Do you want to proceed?
+Proceed with full wipe (1 + 2)?
+Choose No to only clear clipboard + Recent.
 "@
     $r = [System.Windows.Forms.MessageBox]::Show(
         $msg,
         "Privacy Wipe",
-        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
         [System.Windows.Forms.MessageBoxIcon]::Warning
     )
-    if ($r -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+    if ($r -eq [System.Windows.Forms.DialogResult]::Cancel) { return }
 
     try { Set-Clipboard $null } catch {}
-    Remove-Item "$env:APPDATA\Microsoft\Windows\Recent\*" -Force -EA SilentlyContinue
-    [System.Windows.Forms.MessageBox]::Show("Clipboard + Recent files wiped")
+    Remove-Item "$env:APPDATA\Microsoft\Windows\Recent\*" -Force -ErrorAction SilentlyContinue
+
+    $extra = ""
+    if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
+        $targets = @(
+            $logFile,
+            $lastSession,
+            $favoritesFile,
+            (Join-Path $configDir "debug_log.txt"),
+            (Join-Path $configDir "last_download_log.txt"),
+            (Join-Path $configDir "HOW_TO_SETUP_COOKIES.txt")
+        )
+        foreach ($t in $targets) {
+            if (Test-Path -LiteralPath $t) {
+                try { Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue } catch {}
+            }
+        }
+        # Clear all cookies*.txt
+        Get-ChildItem -Path $configDir -Filter "cookies*.txt" -ErrorAction SilentlyContinue | ForEach-Object {
+            try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue } catch {}
+        }
+        $script:favorites = @()
+        $extra = "`nTool logs, last session, favorites, and cookie files cleared."
+    }
+
+    [System.Windows.Forms.MessageBox]::Show("Clipboard + Recent files wiped.$extra")
 })
 $btnSideExit.Add_Click({ $form.Close() })
 
