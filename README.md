@@ -1,9 +1,69 @@
-Critical URL injection fixed with Test-SafeUrl + proper escaping so a malicious paste cannot break out of the generated PowerShell and run arbitrary commands.
-Converter no longer force-deletes originals unless you explicitly check the new “Delete originals” box (off by default).
-Duplicate cleaner now uses real SHA-256 content hashes instead of filename similarity — different edits/qualities stay safe.
---cookies-from-browser completely removed; only your exported cookies*.txt files are used.
-Privacy Wipe can now also wipe the tool’s own logs, last session, favorites, and cookie files.
-Close-All-Browsers now requires confirmation before force-killing process trees.
+UltimateGoonerTool v.1.28.7-sec — Changelog
+UI / Display
+
+Enabled process DPI awareness + visual styles so text and controls stay sharp on high-DPI displays (no blurry upscaling)
+Main window set to a compact fixed size (similar to original layout)
+Window resize/maximize disabled (FixedSingle) for a stable layout
+Confirm Download dialog enlarged — full URL, estimate count, and YES/NO buttons no longer clipped
+Download progress dialog enlarged — status text, progress bar, and CANCEL DOWNLOAD fully visible
+Convert Videos dialog enlarged and re-laid out:
+Radio options stacked vertically (no overlap)
+Format dropdown shows full “MP4 (recommended)” text
+Delete-originals checkbox text fully visible
+
+
+Convert
+
+“Delete originals after successful convert” is ON by default (still can be unchecked)
+
+Confirm Download
+
+Removed “Do not show this again” checkbox
+Confirmation dialog always appears on every single/queue/OnlyFans download
+
+Auto-organize downloads (new)
+
+New checkbox in Tools & Sliders:
+“Auto-organize downloads by site + username”
+When enabled:
+Files save under DownloadFolder\SiteName\
+If a username is detected in the URL → DownloadFolder\SiteName\Username\
+Examples: RedGifs /users/vixenp → ...\RedGifs\vixenp\
+
+Supported site name mapping for common hosts (RedGifs, Pornhub, Xvideos, OnlyFans, Fansly, etc.)
+Bugfix: organize failed because $host is a reserved PowerShell variable — renamed to $siteHost
+
+Other
+
+Version label updated to v.1.28.7-sec
+Settings persist AutoOrganize in settings.txt
+
+
+Convert
+
+“Delete originals after successful convert” is ON by default (still can be unchecked)
+
+Confirm Download
+
+Removed “Do not show this again” checkbox
+Confirmation dialog always appears on every single/queue/OnlyFans download
+
+Auto-organize downloads (new)
+
+New checkbox in Tools & Sliders:
+“Auto-organize downloads by site + username”
+When enabled:
+Files save under DownloadFolder\SiteName\
+If a username is detected in the URL → DownloadFolder\SiteName\Username\
+Examples: RedGifs /users/vixenp → ...\RedGifs\vixenp\
+
+Supported site name mapping for common hosts (RedGifs, Pornhub, Xvideos, OnlyFans, Fansly, etc.)
+Bugfix: organize failed because $host is a reserved PowerShell variable — renamed to $siteHost
+
+Other
+
+Version label updated to v.1.28.7-sec
+Settings persist AutoOrganize in settings.txt
 
 ---
 
