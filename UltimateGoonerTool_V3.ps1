@@ -1,12 +1,11 @@
 # ============================================================
 # UltimateGoonerTool V3 - Final Portable Edition (Security Hardened)
-# Version: v.1.27-sec
-# Changes from 1.26:
-#  - Critical: URL injection prevention (Test-SafeUrl + proper escaping)
-#  - Converter no longer force-deletes originals by default
-#  - Duplicate cleaner now uses SHA-256 content hashes
-#  - --cookies-from-browser disabled by default (exported files only)
-#  - Privacy wipe can optionally clear tool logs/cookies
+# Version: v.1.28.7-sec
+# Changes:
+#  - Confirm Download dialog enlarged so text/buttons are not cut off
+#  - Tools: toggle "Auto-organize downloads by site + username"
+#  - When enabled, files go to DownloadFolder\SiteName\Username\
+#  - Window resizable, DPI-sharp text
 # ============================================================
 
 Add-Type -Name Window -Namespace Console -MemberDefinition '
@@ -20,6 +19,30 @@ try { [Console.Window]::ShowWindow($consolePtr, 0) | Out-Null } catch {}
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName Microsoft.VisualBasic
+
+# Enable DPI awareness so text and controls render sharp on high-DPI / scaled displays
+try {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class DpiHelper {
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+}
+"@ -ErrorAction Stop
+    [void][DpiHelper]::SetProcessDPIAware()
+} catch {}
+try { [System.Windows.Forms.Application]::EnableVisualStyles() } catch {}
+try { [System.Windows.Forms.Application]::SetCompatibleTextRenderingDefault($false) } catch {}
+
+# DPI scale factor so the window keeps the same physical size it had when Windows used to upscale (blurry)
+$script:dpiScale = 1.0
+try {
+    $g = [System.Drawing.Graphics]::FromHwnd([IntPtr]::Zero)
+    $script:dpiScale = [Math]::Max(1.0, $g.DpiX / 96.0)
+    $g.Dispose()
+} catch {}
+function Scale([int]$v) { return [int][Math]::Round($v * $script:dpiScale) }
 
 $ErrorActionPreference = "Continue"
 trap {
@@ -167,7 +190,7 @@ function Show-DownloadProgress {
     )
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = $Title
-    $dlg.Size = New-Object System.Drawing.Size(520, 250)
+    $dlg.Size = New-Object System.Drawing.Size(580, 280)
     $dlg.StartPosition = "CenterScreen"
     $dlg.FormBorderStyle = "FixedDialog"
     $dlg.MaximizeBox = $false
@@ -180,22 +203,22 @@ function Show-DownloadProgress {
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Text = $Status
     $lbl.Location = New-Object System.Drawing.Point(20, 18)
-    $lbl.Size = New-Object System.Drawing.Size(470, 25)
-    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $lbl.Size = New-Object System.Drawing.Size(530, 28)
+    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
     $lbl.ForeColor = [System.Drawing.Color]::White
     $dlg.Controls.Add($lbl)
 
     $lblDetail = New-Object System.Windows.Forms.Label
     $lblDetail.Text = "Preparing..."
-    $lblDetail.Location = New-Object System.Drawing.Point(20, 48)
-    $lblDetail.Size = New-Object System.Drawing.Size(470, 40)
-    $lblDetail.Font = New-Object System.Drawing.Font("Consolas", 9)
+    $lblDetail.Location = New-Object System.Drawing.Point(20, 52)
+    $lblDetail.Size = New-Object System.Drawing.Size(530, 45)
+    $lblDetail.Font = New-Object System.Drawing.Font("Consolas", 10)
     $lblDetail.ForeColor = [System.Drawing.Color]::FromArgb(0, 220, 120)
     $dlg.Controls.Add($lblDetail)
 
     $bar = New-Object System.Windows.Forms.ProgressBar
-    $bar.Location = New-Object System.Drawing.Point(20, 100)
-    $bar.Size = New-Object System.Drawing.Size(470, 28)
+    $bar.Location = New-Object System.Drawing.Point(20, 110)
+    $bar.Size = New-Object System.Drawing.Size(530, 32)
     $bar.Minimum = 0
     $bar.Maximum = 100
     $bar.Value = 0
@@ -204,16 +227,16 @@ function Show-DownloadProgress {
 
     $lblPct = New-Object System.Windows.Forms.Label
     $lblPct.Text = "0%"
-    $lblPct.Location = New-Object System.Drawing.Point(20, 135)
-    $lblPct.Size = New-Object System.Drawing.Size(470, 20)
-    $lblPct.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblPct.Location = New-Object System.Drawing.Point(20, 150)
+    $lblPct.Size = New-Object System.Drawing.Size(530, 22)
+    $lblPct.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $lblPct.ForeColor = [System.Drawing.Color]::LightGray
     $dlg.Controls.Add($lblPct)
 
     $btnCancel = New-Object System.Windows.Forms.Button
     $btnCancel.Text = "CANCEL DOWNLOAD"
-    $btnCancel.Location = New-Object System.Drawing.Point(140, 175)
-    $btnCancel.Size = New-Object System.Drawing.Size(240, 38)
+    $btnCancel.Location = New-Object System.Drawing.Point(160, 195)
+    $btnCancel.Size = New-Object System.Drawing.Size(260, 42)
     $btnCancel.FlatStyle = "Flat"
     $btnCancel.BackColor = [System.Drawing.Color]::FromArgb(180, 40, 40)
     $btnCancel.ForeColor = [System.Drawing.Color]::White
@@ -520,7 +543,7 @@ $isDarkTheme            = $false
 $startWithWindows       = $false
 $suppressGalleryWarning = $false
 $suppressFfmpegWarning  = $false
-$suppressDownloadConfirm = $false
+$autoOrganize           = $false
 
 if (Test-Path $settingsFile) {
     foreach ($line in (Get-Content $settingsFile)) {
@@ -530,7 +553,7 @@ if (Test-Path $settingsFile) {
         if ($line -match "StartWithWindows=(True|False)")        { $startWithWindows       = [bool]::Parse($Matches[1]) }
         if ($line -match "SuppressGalleryWarning=(True|False)")  { $suppressGalleryWarning = [bool]::Parse($Matches[1]) }
         if ($line -match "SuppressFfmpegWarning=(True|False)")   { $suppressFfmpegWarning  = [bool]::Parse($Matches[1]) }
-        if ($line -match "SuppressDownloadConfirm=(True|False)") { $suppressDownloadConfirm = [bool]::Parse($Matches[1]) }
+        if ($line -match "AutoOrganize=(True|False)")            { $script:autoOrganize    = [bool]::Parse($Matches[1]) }
     }
 }
 
@@ -542,7 +565,7 @@ DarkTheme=$isDarkTheme
 StartWithWindows=$startWithWindows
 SuppressGalleryWarning=$suppressGalleryWarning
 SuppressFfmpegWarning=$suppressFfmpegWarning
-SuppressDownloadConfirm=$suppressDownloadConfirm
+AutoOrganize=$autoOrganize
 "@ | Set-Content $settingsFile
 }
 
@@ -551,6 +574,50 @@ if (Test-Path $favoritesFile) {
     $favorites = @(Get-Content $favoritesFile | Where-Object { $_ -ne "" })
 }
 function Save-Favorites { $favorites | Set-Content $favoritesFile }
+
+function Get-OrganizedDownloadPath {
+    param([string]$Url)
+    if (-not $script:autoOrganize) { return $downloadPath }
+    try {
+        $uri = [System.Uri]$Url
+        $siteHost = $uri.Host.ToLowerInvariant() -replace '^www\.',''
+        $site = switch -Regex ($siteHost) {
+            'redgifs' { 'RedGifs' }
+            'pornhub' { 'Pornhub' }
+            'xvideos' { 'Xvideos' }
+            'xhamster' { 'XHamster' }
+            'spankbang' { 'SpankBang' }
+            'onlyfans' { 'OnlyFans' }
+            'fansly' { 'Fansly' }
+            'erome' { 'EroMe' }
+            'imagefap' { 'ImageFap' }
+            'nhentai' { 'nhentai' }
+            'rule34' { 'Rule34' }
+            'reddit' { 'Reddit' }
+            'chaturbate' { 'Chaturbate' }
+            default { ($siteHost -split '\.')[0] }
+        }
+        $user = $null
+        $path = $uri.AbsolutePath
+        if ($path -match '/users?/([^/]+)') { $user = $Matches[1] }
+        elseif ($path -match '/model/([^/]+)') { $user = $Matches[1] }
+        elseif ($path -match '/profile/([^/]+)') { $user = $Matches[1] }
+        elseif ($path -match '/u/([^/]+)') { $user = $Matches[1] }
+        elseif ($path -match '/([^/]+)/?$' -and $siteHost -match 'redgifs|onlyfans|fansly') {
+            $cand = $Matches[1]
+            if ($cand -and $cand -notmatch '^(video|watch|embed|gifs?|explore|users)$') { $user = $cand }
+        }
+        if ($user) { $user = ($user -replace '[^\w\.-]','_') }
+        $dest = Join-Path $downloadPath $site
+        if ($user) { $dest = Join-Path $dest $user }
+        if (-not (Test-Path -LiteralPath $dest)) {
+            New-Item -ItemType Directory -Path $dest -Force | Out-Null
+        }
+        return $dest
+    } catch {
+        return $downloadPath
+    }
+}
 
 function Test-GalleryDL {
     try { $null = Get-Command gallery-dl -ErrorAction Stop; return $true } catch {}
@@ -716,11 +783,10 @@ function Show-DownloadConfirm {
         [string]$UrlOrDesc = "",
         [int]$Expected = 0
     )
-    if ($suppressDownloadConfirm) { return $true }
 
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = "Confirm Download"
-    $dlg.Size = New-Object System.Drawing.Size(520, 280)
+    $dlg.Size = New-Object System.Drawing.Size(580, 310)
     $dlg.StartPosition = "CenterParent"
     $dlg.FormBorderStyle = "FixedDialog"
     $dlg.MaximizeBox = $false
@@ -734,26 +800,18 @@ function Show-DownloadConfirm {
     } else {
         "Page scan found 0 (or unknown).`nWill download whatever is available."
     }
-    $shortUrl = if ($UrlOrDesc.Length -gt 70) { $UrlOrDesc.Substring(0, 67) + "..." } else { $UrlOrDesc }
+    $shortUrl = if ($UrlOrDesc.Length -gt 80) { $UrlOrDesc.Substring(0, 77) + "..." } else { $UrlOrDesc }
     $lbl.Text = "You are about to download:`n$shortUrl`n`n$estText`n`nDo you want to proceed?"
     $lbl.Location = New-Object System.Drawing.Point(20, 18)
-    $lbl.Size = New-Object System.Drawing.Size(470, 120)
+    $lbl.Size = New-Object System.Drawing.Size(510, 160)
     $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $lbl.ForeColor = [System.Drawing.Color]::White
     $dlg.Controls.Add($lbl)
 
-    $chk = New-Object System.Windows.Forms.CheckBox
-    $chk.Text = "DO NOT SHOW THIS AGAIN"
-    $chk.Location = New-Object System.Drawing.Point(20, 155)
-    $chk.AutoSize = $true
-    $chk.ForeColor = [System.Drawing.Color]::FromArgb(0, 220, 120)
-    $chk.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    $dlg.Controls.Add($chk)
-
     $btnYes = New-Object System.Windows.Forms.Button
     $btnYes.Text = "YES - DOWNLOAD"
-    $btnYes.Size = New-Object System.Drawing.Size(160, 38)
-    $btnYes.Location = New-Object System.Drawing.Point(120, 195)
+    $btnYes.Size = New-Object System.Drawing.Size(190, 44)
+    $btnYes.Location = New-Object System.Drawing.Point(90, 210)
     $btnYes.BackColor = [System.Drawing.Color]::FromArgb(0, 150, 90)
     $btnYes.ForeColor = [System.Drawing.Color]::White
     $btnYes.FlatStyle = "Flat"
@@ -763,8 +821,8 @@ function Show-DownloadConfirm {
 
     $btnNo = New-Object System.Windows.Forms.Button
     $btnNo.Text = "NO - CANCEL"
-    $btnNo.Size = New-Object System.Drawing.Size(140, 38)
-    $btnNo.Location = New-Object System.Drawing.Point(300, 195)
+    $btnNo.Size = New-Object System.Drawing.Size(170, 44)
+    $btnNo.Location = New-Object System.Drawing.Point(310, 210)
     $btnNo.BackColor = [System.Drawing.Color]::FromArgb(180, 40, 40)
     $btnNo.ForeColor = [System.Drawing.Color]::White
     $btnNo.FlatStyle = "Flat"
@@ -776,11 +834,6 @@ function Show-DownloadConfirm {
     $dlg.CancelButton = $btnNo
 
     $result = $dlg.ShowDialog()
-
-    if ($chk.Checked) {
-        $script:suppressDownloadConfirm = $true
-        Save-Settings
-    }
 
     return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
 }
@@ -804,7 +857,7 @@ function Show-ConvertDialog {
 
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = "Convert Videos"
-    $dlg.Size = New-Object System.Drawing.Size(520, 420)
+    $dlg.Size = New-Object System.Drawing.Size(640, 460)
     $dlg.StartPosition = "CenterParent"
     $dlg.FormBorderStyle = "FixedDialog"
     $dlg.MaximizeBox = $false
@@ -812,44 +865,44 @@ function Show-ConvertDialog {
 
     $lblMode = New-Object System.Windows.Forms.Label
     $lblMode.Text = "Choose what to convert:"
-    $lblMode.Location = New-Object System.Drawing.Point(20, 20)
+    $lblMode.Location = New-Object System.Drawing.Point(20, 18)
     $lblMode.AutoSize = $true
     $dlg.Controls.Add($lblMode)
 
     $rbFile = New-Object System.Windows.Forms.RadioButton
     $rbFile.Text = "Video file(s) - multi-select OK"
-    $rbFile.Location = New-Object System.Drawing.Point(20, 50)
+    $rbFile.Location = New-Object System.Drawing.Point(20, 48)
     $rbFile.Checked = $true
     $rbFile.AutoSize = $true
     $dlg.Controls.Add($rbFile)
 
     $rbFolder = New-Object System.Windows.Forms.RadioButton
     $rbFolder.Text = "Entire folder (incl. subfolders)"
-    $rbFolder.Location = New-Object System.Drawing.Point(220, 50)
+    $rbFolder.Location = New-Object System.Drawing.Point(20, 78)
     $rbFolder.AutoSize = $true
     $dlg.Controls.Add($rbFolder)
 
     $txtPath = New-Object System.Windows.Forms.TextBox
-    $txtPath.Location = New-Object System.Drawing.Point(20, 90)
-    $txtPath.Size = New-Object System.Drawing.Size(360, 25)
+    $txtPath.Location = New-Object System.Drawing.Point(20, 115)
+    $txtPath.Size = New-Object System.Drawing.Size(480, 28)
     $txtPath.ReadOnly = $true
     $dlg.Controls.Add($txtPath)
 
     $btnBrowse = New-Object System.Windows.Forms.Button
     $btnBrowse.Text = "Browse..."
-    $btnBrowse.Location = New-Object System.Drawing.Point(390, 88)
-    $btnBrowse.Size = New-Object System.Drawing.Size(90, 28)
+    $btnBrowse.Location = New-Object System.Drawing.Point(510, 113)
+    $btnBrowse.Size = New-Object System.Drawing.Size(95, 30)
     $dlg.Controls.Add($btnBrowse)
 
     $lblFormat = New-Object System.Windows.Forms.Label
     $lblFormat.Text = "Convert to format:"
-    $lblFormat.Location = New-Object System.Drawing.Point(20, 130)
+    $lblFormat.Location = New-Object System.Drawing.Point(20, 160)
     $lblFormat.AutoSize = $true
     $dlg.Controls.Add($lblFormat)
 
     $cmbFormat = New-Object System.Windows.Forms.ComboBox
-    $cmbFormat.Location = New-Object System.Drawing.Point(150, 127)
-    $cmbFormat.Size = New-Object System.Drawing.Size(150, 28)
+    $cmbFormat.Location = New-Object System.Drawing.Point(160, 156)
+    $cmbFormat.Size = New-Object System.Drawing.Size(200, 28)
     $cmbFormat.DropDownStyle = "DropDownList"
     $cmbFormat.Items.AddRange(@("MP4 (recommended)", "MKV", "WebM", "AVI", "MOV", "FLV", "M4V"))
     $cmbFormat.SelectedIndex = 0
@@ -857,30 +910,30 @@ function Show-ConvertDialog {
 
     $lblStatus = New-Object System.Windows.Forms.Label
     $lblStatus.Text = "Ready - pick one or many files, or a whole folder"
-    $lblStatus.Location = New-Object System.Drawing.Point(20, 170)
-    $lblStatus.Size = New-Object System.Drawing.Size(460, 20)
+    $lblStatus.Location = New-Object System.Drawing.Point(20, 200)
+    $lblStatus.Size = New-Object System.Drawing.Size(580, 22)
     $dlg.Controls.Add($lblStatus)
 
     $progress = New-Object System.Windows.Forms.ProgressBar
-    $progress.Location = New-Object System.Drawing.Point(20, 200)
-    $progress.Size = New-Object System.Drawing.Size(460, 25)
+    $progress.Location = New-Object System.Drawing.Point(20, 230)
+    $progress.Size = New-Object System.Drawing.Size(580, 28)
     $progress.Minimum = 0
     $progress.Maximum = 100
     $progress.Value = 0
     $dlg.Controls.Add($progress)
 
     $chkDeleteOrig = New-Object System.Windows.Forms.CheckBox
-    $chkDeleteOrig.Text = "Delete originals after successful convert (IRREVERSIBLE - off by default)"
-    $chkDeleteOrig.Location = New-Object System.Drawing.Point(20, 235)
-    $chkDeleteOrig.Size = New-Object System.Drawing.Size(460, 25)
-    $chkDeleteOrig.Checked = $false
+    $chkDeleteOrig.Text = "Delete originals after successful convert (IRREVERSIBLE - on by default, uncheck to keep)"
+    $chkDeleteOrig.Location = New-Object System.Drawing.Point(20, 275)
+    $chkDeleteOrig.Size = New-Object System.Drawing.Size(580, 30)
+    $chkDeleteOrig.Checked = $true
     $chkDeleteOrig.ForeColor = [System.Drawing.Color]::FromArgb(180, 40, 40)
     $dlg.Controls.Add($chkDeleteOrig)
 
     $btnStart = New-Object System.Windows.Forms.Button
     $btnStart.Text = "Start Convert"
-    $btnStart.Location = New-Object System.Drawing.Point(250, 320)
-    $btnStart.Size = New-Object System.Drawing.Size(120, 35)
+    $btnStart.Location = New-Object System.Drawing.Point(340, 360)
+    $btnStart.Size = New-Object System.Drawing.Size(140, 40)
     $btnStart.BackColor = [System.Drawing.Color]::FromArgb(0,150,90)
     $btnStart.ForeColor = [System.Drawing.Color]::White
     $btnStart.FlatStyle = "Flat"
@@ -888,8 +941,8 @@ function Show-ConvertDialog {
 
     $btnClose = New-Object System.Windows.Forms.Button
     $btnClose.Text = "Close"
-    $btnClose.Location = New-Object System.Drawing.Point(380, 320)
-    $btnClose.Size = New-Object System.Drawing.Size(100, 35)
+    $btnClose.Location = New-Object System.Drawing.Point(500, 360)
+    $btnClose.Size = New-Object System.Drawing.Size(100, 40)
     $btnClose.FlatStyle = "Flat"
     $dlg.Controls.Add($btnClose)
 
@@ -1166,18 +1219,21 @@ if (-not (Test-Path $setupDoneFile)) {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "UltimateGoonerTool V3"
-$form.Size = New-Object System.Drawing.Size(1280, 820)
+$form.Size = New-Object System.Drawing.Size((Scale 1100), (Scale 700))
+$form.MinimumSize = New-Object System.Drawing.Size((Scale 900), (Scale 580))
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $true
+$form.Font = New-Object System.Drawing.Font("Segoe UI", [Math]::Max(9, [int](9 * $script:dpiScale * 0.9)))
+$form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
 
 if (Test-Path $windowFile) {
     try {
         $w = Get-Content $windowFile
         if ($w.Count -ge 4) {
             $x = [int]$w[0]; $y = [int]$w[1]; $width = [int]$w[2]; $height = [int]$w[3]
-            if ($width -gt 400 -and $height -gt 300) {
+            if ($width -ge 900 -and $height -ge 600) {
                 $form.Location = New-Object System.Drawing.Point($x, $y)
                 $form.Size = New-Object System.Drawing.Size($width, $height)
             }
@@ -1196,32 +1252,33 @@ if (Test-Path $bgImage) {
 }
 
 $sidebar = New-Object System.Windows.Forms.Panel
-$sidebar.Location = New-Object System.Drawing.Point(0,0)
-$sidebar.Size = New-Object System.Drawing.Size(190,820)
+$sidebar.Dock = [System.Windows.Forms.DockStyle]::Left
+$sidebar.Width = (Scale 190)
 $sidebar.BackColor = [System.Drawing.Color]::FromArgb(0,160,100)
 $form.Controls.Add($sidebar)
 
 $lblLogo = New-Object System.Windows.Forms.Label
 $lblLogo.Text = "GOONER V3"
 $lblLogo.ForeColor = [System.Drawing.Color]::White
-$lblLogo.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
-$lblLogo.Location = New-Object System.Drawing.Point(18,22)
+$lblLogo.Font = New-Object System.Drawing.Font("Segoe UI", [Math]::Max(12, (Scale 13)), [System.Drawing.FontStyle]::Bold)
+$lblLogo.Location = New-Object System.Drawing.Point((Scale 18), (Scale 22))
 $lblLogo.AutoSize = $true
 $sidebar.Controls.Add($lblLogo)
 
 function New-SideBtn($text, $y) {
     $b = New-Object System.Windows.Forms.Button
     $b.Text = "  $text"
-    $b.Location = New-Object System.Drawing.Point(12,$y)
-    $b.Size = New-Object System.Drawing.Size(166,48)
+    $b.Location = New-Object System.Drawing.Point((Scale 12), (Scale $y))
+    $b.Size = New-Object System.Drawing.Size((Scale 166), (Scale 48))
     $b.FlatStyle = "Flat"
     $b.BackColor = [System.Drawing.Color]::FromArgb(0,145,90)
     $b.ForeColor = [System.Drawing.Color]::White
     $b.FlatAppearance.BorderSize = 0
     $b.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(0,190,120)
-    $b.Font = New-Object System.Drawing.Font("Segoe UI", 11)
+    $b.Font = New-Object System.Drawing.Font("Segoe UI", [Math]::Max(10, (Scale 11)))
     $b.TextAlign = "MiddleLeft"
     $b.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $b.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
     $sidebar.Controls.Add($b)
     return $b
 }
@@ -1233,11 +1290,11 @@ $btnSideFavs     = New-SideBtn "Favorites" 270
 $btnSidePrivacy  = New-SideBtn "Privacy Wipe" 330
 $btnSideConsole  = New-SideBtn "Console" 390
 $btnSideExit     = New-SideBtn "Exit" 740
+$btnSideExit.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 function New-ContentPanel {
     $p = New-Object System.Windows.Forms.Panel
-    $p.Location = New-Object System.Drawing.Point(190,0)
-    $p.Size = New-Object System.Drawing.Size(1090,820)
+    $p.Dock = [System.Windows.Forms.DockStyle]::Fill
     $p.BackColor = if ($isDarkTheme) { [System.Drawing.Color]::FromArgb(30,30,30) } else { [System.Drawing.Color]::FromArgb(245,245,245) }
     $p.Visible = $false
     $p.AutoScroll = $true
@@ -1252,15 +1309,16 @@ $panelFavs     = New-ContentPanel
 
 $lblHomeTitle = New-Object System.Windows.Forms.Label
 $lblHomeTitle.Text = "Working Sites - Click any to open"
-$lblHomeTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$lblHomeTitle.Font = New-Object System.Drawing.Font("Segoe UI", [Math]::Max(12, (Scale 12)), [System.Drawing.FontStyle]::Bold)
 $lblHomeTitle.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::FromArgb(30,30,30) }
-$lblHomeTitle.Location = New-Object System.Drawing.Point(20,15)
+$lblHomeTitle.Location = New-Object System.Drawing.Point((Scale 20),(Scale 15))
 $lblHomeTitle.AutoSize = $true
 $panelHome.Controls.Add($lblHomeTitle)
 
 $flowSites = New-Object System.Windows.Forms.FlowLayoutPanel
-$flowSites.Location = New-Object System.Drawing.Point(15,50)
-$flowSites.Size = New-Object System.Drawing.Size(1050,700)
+$flowSites.Location = New-Object System.Drawing.Point((Scale 15), (Scale 50))
+$flowSites.Size = New-Object System.Drawing.Size((Scale 1050), (Scale 700))
+$flowSites.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 $flowSites.AutoScroll = $true
 $flowSites.WrapContents = $true
 $panelHome.Controls.Add($flowSites)
@@ -1268,7 +1326,8 @@ $panelHome.Controls.Add($flowSites)
 foreach ($site in $allSites) {
     $b = New-Object System.Windows.Forms.Button
     $b.Text = $site.N
-    $b.Size = New-Object System.Drawing.Size(155,42)
+    $b.Size = New-Object System.Drawing.Size((Scale 155), (Scale 42))
+    $b.Font = New-Object System.Drawing.Font("Segoe UI", [Math]::Max(9, (Scale 9)))
     $b.FlatStyle = "Flat"
     $b.BackColor = if ($isDarkTheme) { [System.Drawing.Color]::FromArgb(50,50,50) } else { [System.Drawing.Color]::White }
     $b.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::FromArgb(30,30,30) }
@@ -1286,39 +1345,40 @@ foreach ($site in $allSites) {
 }
 
 $lblVersion = New-Object System.Windows.Forms.Label
-$lblVersion.Text = "v.1.27-sec"
+$lblVersion.Text = "v.1.28.7-sec"
 $lblVersion.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $lblVersion.ForeColor = [System.Drawing.Color]::Black
 $lblVersion.BackColor = [System.Drawing.Color]::Transparent
-$lblVersion.Location = New-Object System.Drawing.Point(1180, 785)
+$lblVersion.Location = New-Object System.Drawing.Point((Scale 1180), (Scale 785))
 $lblVersion.AutoSize = $true
+$lblVersion.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 $form.Controls.Add($lblVersion)
 
 $lblDL = New-Object System.Windows.Forms.Label
 $lblDL.Text = "Download Center - yt-dlp (main) -> gallery-dl (fallback)"
-$lblDL.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$lblDL.Font = New-Object System.Drawing.Font("Segoe UI", [Math]::Max(12, (Scale 12)), [System.Drawing.FontStyle]::Bold)
 $lblDL.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::FromArgb(30,30,30) }
-$lblDL.Location = New-Object System.Drawing.Point(20,15)
+$lblDL.Location = New-Object System.Drawing.Point((Scale 20),(Scale 15))
 $lblDL.AutoSize = $true
 $panelDownload.Controls.Add($lblDL)
 
 $lblPath = New-Object System.Windows.Forms.Label
 $lblPath.Text = "Current folder: $downloadPath"
 $lblPath.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::LightGray } else { [System.Drawing.Color]::FromArgb(80,80,80) }
-$lblPath.Location = New-Object System.Drawing.Point(20,50)
-$lblPath.Size = New-Object System.Drawing.Size(900,22)
+$lblPath.Location = New-Object System.Drawing.Point((Scale 20),(Scale 50))
+$lblPath.Size = New-Object System.Drawing.Size((Scale 900),(Scale 22))
 $panelDownload.Controls.Add($lblPath)
 
 function New-CardPanel($x,$y,$w,$h,$col,$title) {
     $p = New-Object System.Windows.Forms.Panel
-    $p.Location = New-Object System.Drawing.Point($x,$y)
-    $p.Size = New-Object System.Drawing.Size($w,$h)
+    $p.Location = New-Object System.Drawing.Point((Scale $x), (Scale $y))
+    $p.Size = New-Object System.Drawing.Size((Scale $w), (Scale $h))
     $p.BackColor = $col
     $panelDownload.Controls.Add($p)
     $t = New-Object System.Windows.Forms.Label
     $t.Text = $title; $t.ForeColor = [System.Drawing.Color]::White
-    $t.Font = New-Object System.Drawing.Font("Segoe UI",13,[System.Drawing.FontStyle]::Bold)
-    $t.Location = New-Object System.Drawing.Point(18,16); $t.AutoSize = $true
+    $t.Font = New-Object System.Drawing.Font("Segoe UI", [Math]::Max(12, (Scale 13)), [System.Drawing.FontStyle]::Bold)
+    $t.Location = New-Object System.Drawing.Point((Scale 18), (Scale 16)); $t.AutoSize = $true
     $p.Controls.Add($t)
     return $p
 }
@@ -1328,62 +1388,62 @@ $c2 = New-CardPanel 360 90 320 140 ([System.Drawing.Color]::FromArgb(0,170,110))
 $c3 = New-CardPanel 700 90 320 140 ([System.Drawing.Color]::FromArgb(40,120,220)) "Queue + Local"
 
 $btnFull = New-Object System.Windows.Forms.Button
-$btnFull.Text = "Launch Random Sites"; $btnFull.Location = New-Object System.Drawing.Point(18,80)
-$btnFull.Size = New-Object System.Drawing.Size(200,36); $btnFull.FlatStyle = "Flat"
+$btnFull.Text = "Launch Random Sites"; $btnFull.Location = New-Object System.Drawing.Point((Scale 18),(Scale 80))
+$btnFull.Size = New-Object System.Drawing.Size((Scale 200),(Scale 36)); $btnFull.FlatStyle = "Flat"
 $btnFull.BackColor = [System.Drawing.Color]::White; $btnFull.ForeColor = [System.Drawing.Color]::FromArgb(30,30,30)
 $c1.Controls.Add($btnFull)
 
 $btnOneUrl = New-Object System.Windows.Forms.Button
-$btnOneUrl.Text = "Paste URL ->"; $btnOneUrl.Location = New-Object System.Drawing.Point(18,80)
-$btnOneUrl.Size = New-Object System.Drawing.Size(180,36); $btnOneUrl.FlatStyle = "Flat"
+$btnOneUrl.Text = "Paste URL ->"; $btnOneUrl.Location = New-Object System.Drawing.Point((Scale 18),(Scale 80))
+$btnOneUrl.Size = New-Object System.Drawing.Size((Scale 180),(Scale 36)); $btnOneUrl.FlatStyle = "Flat"
 $btnOneUrl.BackColor = [System.Drawing.Color]::White; $btnOneUrl.ForeColor = [System.Drawing.Color]::FromArgb(30,30,30)
 $c2.Controls.Add($btnOneUrl)
 
 $btnQueue = New-Object System.Windows.Forms.Button
-$btnQueue.Text = "Multi-URL Queue"; $btnQueue.Location = New-Object System.Drawing.Point(18,80)
-$btnQueue.Size = New-Object System.Drawing.Size(180,36); $btnQueue.FlatStyle = "Flat"
+$btnQueue.Text = "Multi-URL Queue"; $btnQueue.Location = New-Object System.Drawing.Point((Scale 18),(Scale 80))
+$btnQueue.Size = New-Object System.Drawing.Size((Scale 180),(Scale 36)); $btnQueue.FlatStyle = "Flat"
 $btnQueue.BackColor = [System.Drawing.Color]::White; $btnQueue.ForeColor = [System.Drawing.Color]::FromArgb(30,30,30)
 $c3.Controls.Add($btnQueue)
 
 $btnOpenFold = New-Object System.Windows.Forms.Button
-$btnOpenFold.Text = "Open Download Folder"; $btnOpenFold.Location = New-Object System.Drawing.Point(20,260)
-$btnOpenFold.Size = New-Object System.Drawing.Size(200,40); $btnOpenFold.FlatStyle = "Flat"
+$btnOpenFold.Text = "Open Download Folder"; $btnOpenFold.Location = New-Object System.Drawing.Point((Scale 20),(Scale 260))
+$btnOpenFold.Size = New-Object System.Drawing.Size((Scale 200),(Scale 40)); $btnOpenFold.FlatStyle = "Flat"
 $btnOpenFold.BackColor = [System.Drawing.Color]::FromArgb(40,40,40); $btnOpenFold.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnOpenFold)
 
 $btnPlay = New-Object System.Windows.Forms.Button
-$btnPlay.Text = "Play Latest Video"; $btnPlay.Location = New-Object System.Drawing.Point(240,260)
-$btnPlay.Size = New-Object System.Drawing.Size(180,40); $btnPlay.FlatStyle = "Flat"
+$btnPlay.Text = "Play Latest Video"; $btnPlay.Location = New-Object System.Drawing.Point((Scale 240),(Scale 260))
+$btnPlay.Size = New-Object System.Drawing.Size((Scale 180),(Scale 40)); $btnPlay.FlatStyle = "Flat"
 $btnPlay.BackColor = [System.Drawing.Color]::FromArgb(40,40,40); $btnPlay.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnPlay)
 
 $btnChangeFold = New-Object System.Windows.Forms.Button
-$btnChangeFold.Text = "Change Download Folder"; $btnChangeFold.Location = New-Object System.Drawing.Point(440,260)
-$btnChangeFold.Size = New-Object System.Drawing.Size(200,40); $btnChangeFold.FlatStyle = "Flat"
+$btnChangeFold.Text = "Change Download Folder"; $btnChangeFold.Location = New-Object System.Drawing.Point((Scale 440),(Scale 260))
+$btnChangeFold.Size = New-Object System.Drawing.Size((Scale 200),(Scale 40)); $btnChangeFold.FlatStyle = "Flat"
 $btnChangeFold.BackColor = [System.Drawing.Color]::FromArgb(40,40,40); $btnChangeFold.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnChangeFold)
 
 $btnConvert = New-Object System.Windows.Forms.Button
-$btnConvert.Text = "Convert Videos"; $btnConvert.Location = New-Object System.Drawing.Point(660,260)
-$btnConvert.Size = New-Object System.Drawing.Size(180,40); $btnConvert.FlatStyle = "Flat"
+$btnConvert.Text = "Convert Videos"; $btnConvert.Location = New-Object System.Drawing.Point((Scale 660),(Scale 260))
+$btnConvert.Size = New-Object System.Drawing.Size((Scale 180),(Scale 40)); $btnConvert.FlatStyle = "Flat"
 $btnConvert.BackColor = [System.Drawing.Color]::FromArgb(180,80,20); $btnConvert.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnConvert)
 
 $btnInstallYtdlp = New-Object System.Windows.Forms.Button
-$btnInstallYtdlp.Text = "Install yt-dlp"; $btnInstallYtdlp.Location = New-Object System.Drawing.Point(20,320)
-$btnInstallYtdlp.Size = New-Object System.Drawing.Size(160,40); $btnInstallYtdlp.FlatStyle = "Flat"
+$btnInstallYtdlp.Text = "Install yt-dlp"; $btnInstallYtdlp.Location = New-Object System.Drawing.Point((Scale 20),(Scale 320))
+$btnInstallYtdlp.Size = New-Object System.Drawing.Size((Scale 160),(Scale 40)); $btnInstallYtdlp.FlatStyle = "Flat"
 $btnInstallYtdlp.BackColor = [System.Drawing.Color]::FromArgb(30,100,180); $btnInstallYtdlp.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnInstallYtdlp)
 
 $btnInstallGallery = New-Object System.Windows.Forms.Button
-$btnInstallGallery.Text = "Install gallery-dl"; $btnInstallGallery.Location = New-Object System.Drawing.Point(200,320)
-$btnInstallGallery.Size = New-Object System.Drawing.Size(160,40); $btnInstallGallery.FlatStyle = "Flat"
+$btnInstallGallery.Text = "Install gallery-dl"; $btnInstallGallery.Location = New-Object System.Drawing.Point((Scale 200),(Scale 320))
+$btnInstallGallery.Size = New-Object System.Drawing.Size((Scale 160),(Scale 40)); $btnInstallGallery.FlatStyle = "Flat"
 $btnInstallGallery.BackColor = [System.Drawing.Color]::FromArgb(30,100,180); $btnInstallGallery.ForeColor = [System.Drawing.Color]::White
 $panelDownload.Controls.Add($btnInstallGallery)
 
 $btnOnlyFans = New-Object System.Windows.Forms.Button
-$btnOnlyFans.Text = "OnlyFans Batch Download"; $btnOnlyFans.Location = New-Object System.Drawing.Point(380,320)
-$btnOnlyFans.Size = New-Object System.Drawing.Size(220,40); $btnOnlyFans.FlatStyle = "Flat"
+$btnOnlyFans.Text = "OnlyFans Batch Download"; $btnOnlyFans.Location = New-Object System.Drawing.Point((Scale 380),(Scale 320))
+$btnOnlyFans.Size = New-Object System.Drawing.Size((Scale 220),(Scale 40)); $btnOnlyFans.FlatStyle = "Flat"
 $btnOnlyFans.BackColor = [System.Drawing.Color]::FromArgb(200,50,120); $btnOnlyFans.ForeColor = [System.Drawing.Color]::White
 $btnOnlyFans.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $panelDownload.Controls.Add($btnOnlyFans)
@@ -1454,9 +1514,17 @@ $chkStartup.Location = New-Object System.Drawing.Point(20,210); $chkStartup.Auto
 $chkStartup.Checked = $startWithWindows
 $panelTools.Controls.Add($chkStartup)
 
+$chkOrganize = New-Object System.Windows.Forms.CheckBox
+$chkOrganize.Text = "Auto-organize downloads by site + username"
+$chkOrganize.ForeColor = if ($isDarkTheme) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::Black }
+$chkOrganize.Location = New-Object System.Drawing.Point(20,240); $chkOrganize.AutoSize = $true
+$chkOrganize.Checked = $autoOrganize
+$chkOrganize.Add_CheckedChanged({ $script:autoOrganize = $chkOrganize.Checked; Save-Settings })
+$panelTools.Controls.Add($chkOrganize)
+
 $btnSetBrowser = New-Object System.Windows.Forms.Button
 $btnSetBrowser.Text = "Set Preferred Browser"
-$btnSetBrowser.Location = New-Object System.Drawing.Point(20,250)
+$btnSetBrowser.Location = New-Object System.Drawing.Point(20,280)
 $btnSetBrowser.Size = New-Object System.Drawing.Size(200,40)
 $btnSetBrowser.FlatStyle = "Flat"
 $btnSetBrowser.BackColor = [System.Drawing.Color]::FromArgb(30,100,180)
@@ -1502,8 +1570,9 @@ $lblFav.AutoSize = $true
 $panelFavs.Controls.Add($lblFav)
 
 $flowFavs = New-Object System.Windows.Forms.FlowLayoutPanel
-$flowFavs.Location = New-Object System.Drawing.Point(15,50)
-$flowFavs.Size = New-Object System.Drawing.Size(1050,700)
+$flowFavs.Location = New-Object System.Drawing.Point((Scale 15),(Scale 50))
+$flowFavs.Size = New-Object System.Drawing.Size((Scale 1050),(Scale 700))
+$flowFavs.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 $flowFavs.AutoScroll = $true
 $flowFavs.WrapContents = $true
 $panelFavs.Controls.Add($flowFavs)
@@ -1582,13 +1651,14 @@ $btnOneUrl.Add_Click({
 
     # Critical: escape so the URL cannot break out of the generated PowerShell string
     $escUrl = Escape-ForDoubleQuotedPs $url
+    $destPath = Get-OrganizedDownloadPath -Url $url
 
     $cmd = @"
 L "URL: $escUrl"
-L "Dest: $downloadPath"
+L "Dest: $destPath"
 L "Cookie files: $($cookieFiles -join '; ')"
 L "Expected items: $expected"
-Set-Location -LiteralPath '$downloadPath'
+Set-Location -LiteralPath '$destPath'
 L "cwd now: `$(Get-Location)"
 `$cookieArgs = @()
 foreach (`$cf in @($cookieFilesLit)) {
@@ -1617,8 +1687,8 @@ L "Done exit=`$LASTEXITCODE"
 "@
 
     $status = if ($expected -gt 0) { "Downloading 0 / $expected" } else { "Downloading..." }
-    Start-HiddenDownload -Command $cmd -StatusText $status -WatchFolder $downloadPath -ExpectedTotal $expected
-    Write-Log "Single URL download: $url (cookies=$($cookieFiles.Count) files expected=$expected)"
+    Start-HiddenDownload -Command $cmd -StatusText $status -WatchFolder $destPath -ExpectedTotal $expected
+    Write-Log "Single URL download: $url -> $destPath (cookies=$($cookieFiles.Count) expected=$expected)"
 })
 
 $btnQueue.Add_Click({
@@ -1670,11 +1740,13 @@ $btnQueue.Add_Click({
         $n++
         $expected = $expectedList[$n-1]
         $escUrl = Escape-ForDoubleQuotedPs $u
+        $destPath = Get-OrganizedDownloadPath -Url $u
         $cmd = @"
 L "QUEUE $n / $total"
 L "URL: $escUrl"
+L "Dest: $destPath"
 L "Cookie files: $($cookieFiles -join '; ')"
-Set-Location -LiteralPath '$downloadPath'
+Set-Location -LiteralPath '$destPath'
 L "cwd now: `$(Get-Location)"
 `$cookieArgs = @()
 foreach (`$cf in @($cookieFilesLit)) {
@@ -1696,8 +1768,8 @@ if (`$LASTEXITCODE -ne 0) {
 L "Item done exit=`$LASTEXITCODE"
 "@
         $status = if ($expected -gt 0) { "Queue $n/$total (0 / $expected)" } else { "Queue $n of $total" }
-        Start-HiddenDownload -Command $cmd -StatusText $status -WatchFolder $downloadPath -ExpectedTotal $expected
-        Write-Log "Queue download $n/$total : $u cookies=$($cookieFiles.Count) expected=$expected"
+        Start-HiddenDownload -Command $cmd -StatusText $status -WatchFolder $destPath -ExpectedTotal $expected
+        Write-Log "Queue download $n/$total : $u -> $destPath cookies=$($cookieFiles.Count) expected=$expected"
     }
     [System.Windows.Forms.MessageBox]::Show("Queue finished. Processed $total link(s).")
 })
@@ -1871,7 +1943,6 @@ $btnDebugger.Add_Click({
     $lines.Add("startWithWindows=$startWithWindows")
     $lines.Add("suppressGalleryWarning=$suppressGalleryWarning")
     $lines.Add("suppressFfmpegWarning=$suppressFfmpegWarning")
-    $lines.Add("suppressDownloadConfirm=$suppressDownloadConfirm")
     $lines.Add("preferredBrowser=$preferredBrowser")
     $lines.Add("")
     $lines.Add("--- Tool Detection ---")
@@ -2295,6 +2366,19 @@ Choose No to only clear clipboard + Recent.
     [System.Windows.Forms.MessageBox]::Show("Clipboard + Recent files wiped.$extra")
 })
 $btnSideExit.Add_Click({ $form.Close() })
+
+# Keep Exit button near bottom of sidebar when window is resized
+$form.Add_Resize({
+    try {
+        if ($btnSideExit -and -not $btnSideExit.IsDisposed) {
+            $btnSideExit.Location = New-Object System.Drawing.Point((Scale 12), [Math]::Max((Scale 450), ($sidebar.ClientSize.Height - (Scale 60))))
+        }
+    } catch {}
+})
+# Initial position
+try {
+    $btnSideExit.Location = New-Object System.Drawing.Point((Scale 12), [Math]::Max((Scale 450), ($sidebar.ClientSize.Height - (Scale 60))))
+} catch {}
 
 try {
     Show-Panel $panelHome
